@@ -2,7 +2,7 @@ suppressPackageStartupMessages( {
   library(Hmisc)
   library(tools)
   library(stringr)
-  # library(tidyr)
+  library(tidyr)
   library(dplyr)
   
   library(ggplot2)
@@ -12,14 +12,27 @@ suppressPackageStartupMessages( {
 
 theme_set(theme_bw())
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
+scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1")
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 scale_colour_periodic_brewer <-
   function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
-scale_fill_periodic_brewer <-
-  function(...) scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
-scale_shape_periodic <- 
-  function(...) scale_shape_manual(..., values = rep(15:18, 5))
+scale_fill_periodic_brewer <- function(...) 
+  scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
+scale_shape_periodic <- function(...) 
+  scale_shape_manual(..., values = rep(15:18, 5))
 
+formatter_sec_to_h <- function(.x) .x/3600 #%>% format(digits=2)
+scale_x_hours <- function(.dh=6, ...) {
+  .fargs <- names(match.call(expand.dots=TRUE))
+  if (any(str_detect(.fargs, 'name'))) {
+    scale_x_continuous(..., labels=formatter_sec_to_h,
+                       breaks=function(.lims) seq(.lims[1] %/% (.dh*3600) *.dh*3600, (.lims[2] %/% (.dh*3600) + 1) *.dh*3600, .dh*3600))
+  } else {
+    scale_x_continuous(..., name='time (h)', labels=formatter_sec_to_h,
+                       breaks=function(.lims) seq(.lims[1] %/% (.dh*3600) *.dh*3600, (.lims[2] %/% (.dh*3600) + 1) *.dh*3600, .dh*3600))
+  }
+}
+sec_to_h_trans <- function() trans_new("sec_to_h", function(.x) .x/3600, function(.x) .x*3600)
 
 load_timm_data <- function(.path, .scripts_path, 
                            .perl_cmd='perl',
@@ -135,4 +148,55 @@ compute_genealogy <- function(.id, .pid, .dgtype) {
   return(.cid)
 }
 
+
+which_touch_exit <- function(.h, .hmin_cutoff) {
+  .t <- which(.h<.hmin_cutoff)
+  if (length(.t) == 0) {
+    return(rep(FALSE, length(.h)))
+  } else {
+    return(c(rep(FALSE, .t[1]),
+             rep(TRUE, length(.h)-.t[1])))
+  }
+}
+
+which_to_progeny <- function(.x, .cid) {
+  .df <- data.frame(x=.x, cid=.cid)
+  .out <- .x
+  .cs <- group_by(.df, cid) %>% 
+           summarise(any=any(x)) %>%
+           filter(any) %>% select(cid) %>% unlist %>% as.character
+  for (.c in .cs) {
+    .is_daughter <- str_detect(.cid, paste0(.c, ".+"))
+    .out[.is_daughter] <- TRUE
+  }
+  return(.out)  
+}
+
+
+parse_timm_curation <- function(.path) {
+  .flines <- readLines(.path)
+  .flines <- .flines[6:length(.flines)] %>%
+    gsub('\t', '', .) # remove tabs
+  # read one table for each type and store all tables in a list
+  .id_lines <- grep("^#", .flines)
+  .ldata <- lapply(seq(length(.id_lines)), function(.i) {
+    .start <- .id_lines[.i] + 1
+    .stop <- ifelse(.i==length(.id_lines), length(.flines), .id_lines[.i+1] - 1)
+    if (.start <= .stop)
+      return ( .flines[.start:.stop] %>% paste(collapse='\n') %>%                             # concat lines
+                 textConnection %>% read.table(comment.char="", sep=",", header=FALSE, stringsAsFactors=FALSE) )
+  })
+  if (all(sapply(.ldata, is.null))) return(data.frame(type='none', frame=-1, action=NA))
+  # find the width of the largest table
+  .max_cols <- lapply(.ldata, function(.d) dim(.d)[2]) %>% unlist %>% max
+  # increase the width of narrower dfs (in order to be able to stack them)
+  lapply(.ldata, function(.d) {
+    if (is.null(.d) || dim(.d)[2] == .max_cols) return(.d)
+    .d[1, .max_cols] <- NA # add NAs columns if narrower dataframe
+    .d
+  }) %>% 
+    # stack all tables
+    do.call(rbind, .) %>%
+    setNames(c('type', 'frame', 'xx', 'action'))
+}
 
