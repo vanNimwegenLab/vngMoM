@@ -2,7 +2,7 @@ suppressPackageStartupMessages( {
   library(Hmisc)
   library(tools)
   library(stringr)
-  library(tidyr)
+  # library(tidyr)
   library(dplyr)
   
   library(ggplot2)
@@ -22,17 +22,20 @@ scale_shape_periodic <- function(...)
   scale_shape_manual(..., values = rep(15:18, 5))
 
 formatter_sec_to_h <- function(.x) .x/3600 #%>% format(digits=2)
-scale_x_hours <- function(.dh=6, ...) {
-  .fargs <- names(match.call(expand.dots=TRUE))
-  if (any(str_detect(.fargs, 'name'))) {
-    scale_x_continuous(..., labels=formatter_sec_to_h,
-                       breaks=function(.lims) seq(.lims[1] %/% (.dh*3600) *.dh*3600, (.lims[2] %/% (.dh*3600) + 1) *.dh*3600, .dh*3600))
-  } else {
-    scale_x_continuous(..., name='time (h)', labels=formatter_sec_to_h,
-                       breaks=function(.lims) seq(.lims[1] %/% (.dh*3600) *.dh*3600, (.lims[2] %/% (.dh*3600) + 1) *.dh*3600, .dh*3600))
-  }
-}
+scale_x_hours <- function(.dh=6, ...) scale_x_continuous(..., name='time (h)', labels=formatter_sec_to_h,
+                                                  breaks=function(.lims) seq(.lims[1] %/% (.dh*3600) *.dh*3600, (.lims[2] %/% (.dh*3600) + 1) *.dh*3600, .dh*3600))
 sec_to_h_trans <- function() trans_new("sec_to_h", function(.x) .x/3600, function(.x) .x*3600)
+
+
+between_or <- function(.x, .a, .b) {
+  if (length(.a) != length(.b)) error('.a and .b must have the same length.')
+  lapply(seq(length(.a)), function(.i) between(.x, .a[.i], .b[.i])) %>%
+    do.call(cbind, .) %>%
+    apply(1, any)
+}
+
+as_numeric <- function(.x) as.numeric(as.character(.x))
+as_numeric_df <- function(.d) modifyList(.d, lapply(.d, as_numeric))
 
 load_timm_data <- function(.path, .scripts_path, 
                            .perl_cmd='perl',
@@ -49,7 +52,7 @@ load_timm_data <- function(.path, .scripts_path,
   .outbase <- basename(.path) %>% sub("ExportedCellStats_", "", .) %>% file_path_sans_ext
   .out_frames_path <- paste0(.outbase, "_frames.txt") %>% file.path(.outdir, .)
   .out_cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
-#   browser()
+  #   browser()
   
   # run perl scripts if output doesn't exist
   if (!file.exists(.out_frames_path) || .force==TRUE) {
@@ -57,7 +60,7 @@ load_timm_data <- function(.path, .scripts_path,
     system2(.perl_cmd, args=c(.frames_script_path, .path, "0"), stdout=.out_frames_path)
   }
   if (!file.exists(.out_frames_path)) stop("Frames file cannot be found.")
-
+  
   if (!file.exists(.out_cells_path) || .force==TRUE) {
     if (.verbose) print(paste("Converting", .out_frames_path, "to", .out_cells_path))
     system2(.perl_cmd, args=c(.cells_script_path, .out_frames_path), stdout=.out_cells_path)
@@ -82,9 +85,6 @@ load_timm_data <- function(.path, .scripts_path,
                 frames=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .frames_out) ))
   }
 }
-
-as_numeric <- function(.x) as.numeric(as.character(.x))
-as_numeric_df <- function(.d) modifyList(.d, lapply(.d, as_numeric))
 
 parse_cells_stats <- function(.path) {
   .flines <- readLines(.path)
