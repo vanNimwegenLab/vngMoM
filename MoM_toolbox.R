@@ -45,70 +45,75 @@ load_timm_data <- function(.path, .scripts_path,
                            .data2preproc=identity) {
   if (!file.exists(.path)) stop("input path is not valid.")
   .dir <- dirname(.path)
+  .name <- basename(.path)
   .frames_script_path <- file.path(.scripts_path, .frames_script)
   .cells_script_path <- file.path(.scripts_path, .cells_script)
   .outdir <- .dir %>% .data2preproc
   dir.create(.outdir, recursive=TRUE, showWarnings=FALSE)
   .outbase <- basename(.path) %>% sub("ExportedCellStats_", "", .) %>% file_path_sans_ext
-  .out_frames_path <- paste0(.outbase, "_frames.txt") %>% file.path(.outdir, .)
-  .out_cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
-  #   browser()
-  
+  .frames_path <- paste0(.outbase, "_frames.txt") %>% file.path(.outdir, .)
+  .cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
+  # browser()
+
   # run perl scripts if output doesn't exist
-  if (!file.exists(.out_frames_path) || .force==TRUE) {
-    if (.verbose) print(paste("Converting", .path, "to", .out_frames_path))
-    system2(.perl_cmd, args=c(.frames_script_path, .path, "0"), stdout=.out_frames_path)
-  }
-  if (!file.exists(.out_frames_path)) stop("Frames file cannot be found.")
+  if (!file.exists(.frames_path) || !file.exists(.cells_path) || .force==TRUE) {
+    if (.verbose) print(paste("Converting", .path))
+    # erik's scripts work only in the working dir
+    if (!file.copy(.path, .name, overwrite=TRUE, copy.mode=FALSE)) stop(paste(.path, 'cannot be copied.'))
+    .out_frames_path <- system2(.perl_cmd, args=c(.frames_script_path, .name, "0"), stdout=TRUE) %>%
+      sub('^>', '', .)
+    if (!file.exists(.out_frames_path)) stop("Frames file cannot be found.")
   
-  if (!file.exists(.out_cells_path) || .force==TRUE) {
-    if (.verbose) print(paste("Converting", .out_frames_path, "to", .out_cells_path))
-    system2(.perl_cmd, args=c(.cells_script_path, .out_frames_path), stdout=.out_cells_path)
+    if (.verbose) print(paste("Converting", .out_frames_path))
+    .out_cells_path <- system2(.perl_cmd, args=c(.cells_script_path, .out_frames_path), stdout=TRUE) %>%
+      sub('^>', '', .)
+    
+    # housekeeping
+    file.rename(.out_frames_path, .frames_path)
+    file.rename(.out_cells_path, .cells_path)
+    file.remove(.name, .out_frames_path, .out_cells_path)
   }
   
-  .cells_out <- parse_cells_stats(.out_cells_path)$growth
+  .frames_out <- parse_frames_stats(.frames_path) %>%
+    rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
+    mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
+    
+  .cells_out <- read.table(.cells_path, comment.char="", header=TRUE) %>%
+    select(-1)
   names(.cells_out) <- names(.cells_out) %>% 
     gsub("X\\.", "", .) %>%
     gsub("\\.", "_", .)
   .cells_out <- .cells_out %>%
     rename(id=cellID, parent_id=parID) %>%
-    mutate(cid = compute_genealogy(id, parent_id, daughter_type))
-  
-  .frames_out <- parse_frames_stats(.out_frames_path) %>%
-    select(-daughter_type, -type_of_end) %>%
-    rename(id=cell_ID, parent_id=parent_ID) %>%
-    left_join(.cells_out)
+    select(-daughter_type) %>%
+    inner_join(select(.frames_out, id, cid) %>% group_by(id) %>% slice(1), by='id')
+    
+  .frames_out <- .frames_out %>%
+    left_join(select(.cells_out, -parent_id, -end_type, -cid), by='id')
   
   if (dim(.cells_out)[1] > 0) {
     .m <- str_match(basename(.path), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*")
-    return(list(cells=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .cells_out),
-                frames=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .frames_out) ))
+    return( list(cells=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .cells_out),
+                 frames=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .frames_out)) )
   }
-}
-
-parse_cells_stats <- function(.path) {
-  .flines <- readLines(.path)
-  .id_lines <- grep("^>", .flines)
-  .growth_id <- which(.flines[.id_lines] == '>GROWTH')
-  .out <- (.id_lines[.growth_id] + 1):(.id_lines[.growth_id+1] - 1) %>% # retrieve lines indices
-    .flines[.] %>% paste(collapse='\n') %>%                             # concat lines
-    textConnection %>% read.table(comment.char="", header=TRUE)         # read table
-  
-  return(list(growth=.out))
 }
 
 parse_frames_stats <- function(.path) {
   flines <- readLines(.path)
+  # browser()
 
   # find column names for stats
   .fieldnames <- str_split(flines[1], '\t')[[1]] %>% sub("#", "", .) %>%
+    gsub(" ", "", .) %>%
     gsub("-", "_", .) %>%
     gsub("\\(", "_", .) %>%
     gsub("\\)", "", .)
   .colnames <- str_split(flines[2], '\t')[[1]] %>% sub("#", "", .) %>%
+    gsub(" ", "", .) %>%
     gsub("-", "_", .) %>%
     gsub("\\(", "_", .) %>%
-    gsub("\\)", "", .)
+    gsub("\\)", "", .) %>%
+    gsub("botom", "bottom", .)
   
   # parse all cells
   id_lines <- grep("^>CELL", flines)
@@ -130,7 +135,18 @@ parse_frames_stats <- function(.path) {
 }
 
 compute_genealogy <- function(.id, .pid, .dgtype) {
-#   browser()
+# browser()
+  # keep only one row per cell
+  .all_id <- .id
+  .idx <- sapply(unique(.id), function(.i) min(which(.id==.i)))
+  .id <- .id[.idx]
+  .pid <- .pid[.idx]
+  .dgtype <- .dgtype[.idx]
+  
+  # check that all cells are there
+  if (sort(unique(.id), decreasing=TRUE)[1] != length(unique(.id)) - 1) 
+    stop('compute_genealogy() requires that each cell appear at least once.')
+  
   .dgtype <- substr(.dgtype, 1, 1)
   .id <- .id + 1
   .pid <- .pid + 1
@@ -145,7 +161,7 @@ compute_genealogy <- function(.id, .pid, .dgtype) {
       .daughters <- which(.pid %in% .id[.daughters])
     }
   }
-  return(.cid)
+  return(.cid[.all_id+1])
 }
 
 
@@ -160,6 +176,7 @@ which_touch_exit <- function(.h, .hmin_cutoff) {
 }
 
 which_to_progeny <- function(.x, .cid) {
+  # browser()
   .df <- data.frame(x=.x, cid=.cid)
   .out <- .x
   .cs <- group_by(.df, cid) %>% 

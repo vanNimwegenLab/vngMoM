@@ -1,19 +1,29 @@
 #!/import/bc2/soft/bin/perl5/perl
 
 
-### PARAMETERS TO TRANSFORM MEASUREMENTS TO PHYSICAL QUANTITIES ####
+#### NOTE: For each cell, dl pixels are added to its estimated length, and for bottom cells
+#that touch the bottom of the growth lane db pixels are additionally subtracted.
+#dl and db were chosen so as to maximize the log-likelihoods of the exponential fits
+#to size as a function of time. ####
 
+#Size (in pixels) added to every cell to optimize linear fit of log(size) vs time
+$dl = 1.1;
+#Size (in pixels) subtracted from bottom cells that touch the bottom of the growth lane
+$db = 5.0;
+
+### PARAMETERS TO TRANSFORM MEASUREMENTS TO PHYSICAL QUANTITIES ####
 #Number of seconds per time point
 $delt = 180;
 #Micrometers per pixel
 $micronperpixel = 0.065;
 #GFP per fluorescence intensity unit
-$GFPperfluo = 1.0; # 1.0/4.02;
-
+$GFPperfluo = 1; # 0.0361;
+#Cell background fluo per micron
+$bg_fluo_per_micron = 0; # 425.7;
 
 $numargs = @ARGV;
 if($numargs != 2){
-    die "USAGE new_get_size_and_fluo.pl infile debug\nWhere debug is a binary variable.";
+    die "USAGE nget_size_and_fluo_18Oct2015.pl infile debug\nWhere debug is a binary variable.";
 }
 
 $infile = shift(@ARGV);
@@ -21,35 +31,41 @@ $infile = shift(@ARGV);
 #If debug is set to one we will print out extra info: rowavs, fluo distributions, and cell_edges
 $debug = shift(@ARGV);
 
+#Get name of growth lane from the file
 if($infile =~ /pos(\d+)/){
-		$pos = $1;
+    $pos = $1;
 }
 else{
-		die "cannot get position from $infile\n";
+    die "cannot get position from $infile\n";
 }
 if($infile =~ /GL(\d+)/){
-		$GL = $1;
+    $GL = $1;
 }
 else{
-		die "cannot get growth lane id GL from $infile.\n";
+    die "cannot get growth lane id GL from $infile.\n";
 }
 $laneID = "pos_" . $pos . "_GL_" . $GL;
 
+if($infile =~ /ExportedCellStats\_(\d+)\_/){
+    $date = $1;
+}
+else{
+    die "cannot get date from $infile.\n";
+}
+
+if($infile =~ /^([\S\/\d\_]*)ExportedCellStats/){
+    $prefix = $1;
+}
+else{
+    die "cannot get prefix from $infile\n";
+}
+
+
+$outfile = ">" . $prefix . "parsed_cellstats_" . $date . "_pos" . $pos . "_GL" . $GL;
+open(G,$outfile);
+print $outfile;
+
 if($debug){
-		if($infile =~ /ExportedCellStats\_(\d+)\_/){
-				$date = $1;
-		}
-		else{
-				die "cannot get date from $infile.\n";
-		}
-
-		if($infile =~ /^([\S\/\d\_]*)ExportedCellStats/){
-				$prefix = $1;
-		}
-		else{
-				die "cannot get prefix from $infile\n";
-		}
-
     $outfile = ">" . $prefix . "cell_edges_" . $date . "_pos" . $pos . "_GL" . $GL;
     open(H,$outfile);
 }
@@ -72,8 +88,8 @@ if($debug){
 
 
 open(F,$infile) || die "cannot open $infile \n";
-print "#CELL lane_ID\tcell_ID\tparent_ID\tdaughter-type\tfirst-time(sec)\tlast-time(sec)\ttype_of_end\n";
-print "#time(sec)\tvertical_top\tvertical_bottom\tcell_num_in_lane\ttotal_cell_in_lane\theight(micrometer)\tflorian_height\tfluo_background\tfluo_amplitude\tfluo_middle\tfluo_width\n";
+print G "#CELL lane_ID\tcell_ID\t parent_ID\tdaughter-type\tfirst-time(sec)\tlast-time(sec)\ttype_of_end\n";
+print G "#time(sec)\tvertical_top\tvertical_botom\tcell_num_in_lane\ttotal_cell_in_lane\theight(micrometer)\tflorian_height\tfluo_background\tfluo_amplitude\tfluo_middle\tfluo_width\ttouch_bottom\n";
 $curid = -1;
 my @curstats = ();
 my @rs = ();
@@ -112,10 +128,10 @@ while(<F>){
 	if($curid >= 0){
 	    $birthtime = $birthframe * $delt;
 	    $curtime = $curframe * $delt;
-	    print ">CELL $laneID\t$curid\t$pid\t$daughtertype\t$birthtime\t$curtime\t$curend\n";
+	    print G ">CELL $laneID\t$curid\t$pid\t$daughtertype\t$birthtime\t$curtime\t$curend\n";
 	    $time = @curstats;
 	    for($t=0;$t<$time;++$t){
-		print $curstats[$t], "\n";
+		print G $curstats[$t], "\n";
 	    }
 
 	    #print rowsums if debugging
@@ -190,6 +206,9 @@ while(<F>){
 	    push @curderiv, $der;
 	}
 
+	#Set binary variable whether it is touching the bottom of the growth lane
+	$touching = 0;
+	
 	#Check if it is the bottom cell
 	$isbottom = 0;
 	if($cellnum == $cellinlane){
@@ -236,7 +255,7 @@ while(<F>){
 	    }
 	    #Second criterium: Is the last data point below the value 3 points back? (ends with decrease)
 	    #This is the one we are using right now.
-	    if($rowsumes[$size-1] > $rowsums[$size-4]){
+	    if($rowsums[$size-1] > $rowsums[$size-4]){
 		$crit2 = 1;
 	    }
 	    	    
@@ -257,8 +276,10 @@ while(<F>){
 		    if($curderiv[$i] < $minderiv){
 			$minderiv = $curderiv[$i];
 			$imax = $i;
+			$imax -= $db;
 		    }
 		}
+		$touching = 1;
 	    }
 	}#Else we have a non-bottom cell
 	else{
@@ -297,10 +318,10 @@ while(<F>){
 	    
 	
 	#Estimate of the size
-	$mysize = $imax-$imin;
+	$mysize = $imax-$imin+$dl;
 	
 	if($debug){
-	    print H "ID $curid frame $curframe mysize $mysize mid $mid imax $imax imin $imin maxderiv $maxderiv minderiv $minderiv bottom $isbottom $crit1 $crit2\n"
+	    print H "ID $curid frame $curframe mysize $mysize mid $mid imax $imax imin $imin maxderiv $maxderiv minderiv $minderiv bottom $isbottom $crit1 $crit2\n";
 	}
     }
     #frame line with cell height and position in growth lane.
@@ -464,13 +485,19 @@ while(<F>){
 	#amplitude
 	#middle (of 100)
 	#width
+	#whether the cell is touching the bottom of the grothw lane.
 	$curtime = $curframe * $delt;
+	
+	#transform pixels to size in microns
 	$realsize = $mysize * $micronperpixel;
 	$florsize = $florheight * $micronperpixel;
-	$bGFP = $b * $GFPperfluo;
+	
+	#Remove cell background fluorescence and transform to GFP molecule units.
+	$A -= $realsize * $bg_fluo_per_micron;
 	$aGFP = $A * $GFPperfluo;
+	$bGFP = $b * $GFPperfluo;
 		
-	$stats = $curtime . "\t" . $toppixel . "\t" . $botpixel . "\t" . $cellnum . "\t" . $cellinlane . "\t" . $realsize . "\t" . $florsize . "\t" . $bGFP . "\t" . $aGFP . "\t" . $mu . "\t" . $del;
+	$stats = $curtime . "\t" . $toppixel . "\t" . $botpixel . "\t" . $cellnum . "\t" . $cellinlane . "\t" . $realsize . "\t" . $florsize . "\t" . $bGFP . "\t" . $aGFP . "\t" . $mu . "\t" . $del . "\t" . $touching;
 	push @curstats, $stats;
     }
     elsif($line =~ /EXIT/){
@@ -486,5 +513,5 @@ while(<F>){
 close(F);
 
 
-# close(G);
+close(G);
 close(H);

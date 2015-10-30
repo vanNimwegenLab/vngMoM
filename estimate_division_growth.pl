@@ -1,6 +1,5 @@
 #!/import/bc2/soft/bin/perl5/perl
 
-$mintopthresh = 100; # position cutoff at channel exit
 
 $infile = shift(@ARGV);
 open(F,$infile) || die "cannot open infile $infile\n";
@@ -13,46 +12,63 @@ my @fluo = ();
 my $t = 0;
 
 
-#Space for residuals
-my @resbegin = ();
-my @resend = ();
-my @countbegin = ();
-my @countend = ();
-my @resbeginbot = ();
-my @resendbot = ();
-my @countbeginbot = ();
-my @countendbot = ();
-for($i=0;$i<100;++$i){
-    $countbegin[$i] = 0;
-    $countend[$i] = 0;
-    $resbegin[$i] = 0;
-    $resend[$i] = 0;
+#1:laneID 
+#2:cellID  
+#3:parID   
+#4:daughter-type   
+#5:start-time      
+#6:end-time        
+#7:end-type        
+#8:ismintoppixel   
+#9:avpos   
+#10:avnumfrombottom 
+#11:last-time-fit   
+#12:Rsize_vs_time   
+#13:slope_size_vs_time      
+#14:se_slope_size_vs_time   
+#15:logsizestart    
+#16:logsize_end    
+#17:logsize-start-errorbar  
+#18:dlogsize        
+#19:error_dlogsize  
+#20:measfluostart   
+#21:measfluoend
+#22:Rfluo_vs_size  
+#23:slope_fluo_vs_size      
+#24:fluo_zero_micron        
+#25:est_fluostart_size      
+#26:est_fluoend_size        
+#27:Rfluo_vs_time   
+#28:dslope_fluo_vs_time      
+#29:est_fluo_start_time     
+#30:est_fluo_end_time       
+#31:slope_logfluo_vs_logsize        
+#32:se_slope_logfluo_vs_logsize     
+#33:slope_fluo_vs_size      
+#34:se_slope_fluo_vs_size
 
-    $countbeginbot[$i] = 0;
-    $countendbot[$i] = 0;
-    $resbeginbot[$i] = 0;
-    $resendbot[$i] = 0;
+
+if($infile =~ /^([\S\d\/\_]*)parsed\_cellstats\_([\S\_\d]+)\s*$/){
+    $prefix = $1;
+    $file = $2;
+    $outfile = ">" . $prefix . "growth_fluo_" . $file;
 }
+else{
+    $outfile = ">growth_fluo_" . $infile;
+}
+open(G,$outfile);
+print $outfile;
+print G "#laneID\tcellID\tparID\tdaughter-type\tstart-time\tend-time\tend-type\tismintoppixel\tavpos\tavnumfrombottom\tlast-time-fit\tRsize_vs_time\tslope_size_vs_time\tse_slope_size_vs_time\tlogsizestart\tlogsize_end\tlogsize-start-errorbar\tdlogsize\terror_dlogsize\tmeasfluostart\tmeasfluoend\tRfluo_vs_size\tslope_fluo_vs_size\tfluo_zero_micron\test_fluostart_size\test_fluoend_size\tRfluo_vs_time\tdsope_fluo_vs_time\test_fluo_start_time\test_fluo_end_time\tslope_logfluo_vs_logsize\tse_slope_logfluo_vs_logsize\tslope_fluo_vs_size\tse_slope_fluo_vs_size\n";
 
-
-print ">GROWTH\n";
-print "#laneID\tcellID\tparID\tdaughter-type\tstart-time\tend-time\tend-type\tismintoppixel\tavpos\tavnumfrombottom\tlast-time-fit\tRsize_vs_time\tslope_size_vs_time\terror-slope\tlogsizestart\tlogsize_end\tlogsize-errobar\tdlogsize\tsigmadlogsize\tmeasfluostart\tmeasfluoend\tRfluo_vs_size\tfluo_per_micron\tfluo_zero_micron\testfluostart_size\testfluoend_size\tRfluo_vs_time\tdfluo_per_sec\testfluostart_time\testfluoendtime\n";
-
-#Only use cells that do not go below pixel 100!!
-
+#We only use cells that do not go below pixel $maxheight and that have at least $minlifetime time points in their lifetime!!
+$maxheight = 100;
+$minlifetime= 4;
 while(<F>){
     #new cell
     if($_ =~ /\>CELL/){
 	$line = $_;
-	#print STDERR "doing $line";
-	#print STDERR "previous has time $t endtype $endtype and mintop $mintop\n";
 	#check if there is a previous example to parse
-	if($t<4 || $mintop < $mintopthresh){ # || $endtype ne "div"
-		if($t>0){
-	    print "$celline NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA NA\n";
-		}
-	} else {
-# 	if($t>=4 && $mintop >= $mintopthresh){
+	if($t>=$minlifetime && $mintop >= $maxheight){
 	    #number of time points
 	    $T = @time;
 	    
@@ -79,8 +95,7 @@ while(<F>){
 		if($Tend <= 0){
 		    print STDERR "PROBLEM: Tend $Tend at t $t, T is $t, Tmin $Tmin\n"
 		}
-		
-		
+
 		$mut /= $Tend;
 		$musize /= $Tend;
 		$varsize /= $Tend;
@@ -129,36 +144,21 @@ while(<F>){
 		}
 	    }
 
-	    #Get residuals (only if cell lived less than 100 time steps) and cell divided
-	    if($Tendmax < 100 && $endtype eq "div"){
-		for($t=0;$t<$Tendmax;++$t){
-		    $d = $size[$t]-$size0max-$alphamax*($time[$t]-$time[0]);
-		    if($avnumfrombottom > 0){
-			++$countbegin[$t];
-			$resbegin[$t] += $d;
-			$tback = $Tendmax-1-$t;
-			$endt = 99-$tback;
-			++$countend[$endt];
-			$resend[$endt] += $d;
-		    }
-		    else{
-			++$countbeginbot[$t];
-			$resbeginbot[$t] += $d;
-			$tback = $Tendmax-1-$t;
-			$endt = 99-$tback;
-			++$countendbot[$endt];
-			$resendbot[$endt] += $d;
-		    }
-		}
-	    }
-
 	    #Get error bars on the estimated slope and start size
 	    if($rmax >= 1.0){
 		$rmax = 0.999999;
 	    }
 	    
-	    $sigmaslope = sqrt((1.0-$rmax*$rmax)*$varsizemax/(($Tendmax-1.0)*$vartmax));
-	    $sigmasize0 = sqrt($varsizemax*(1.0-$rmax*$rmax)/($Tendmax-1.0));	    
+	    $varslope = (1.0-$rmax*$rmax)*$varsizemax/(($Tendmax-1.0)*$vartmax);
+	    if($varslope < 0){
+		$varslope = 0.0;
+	    }
+	    $sigmaslope = sqrt($varslope);
+	    $varsize0 = $varsizemax*(1.0-$rmax*$rmax)/($Tendmax-1.0);
+	    if($varsize0 < 0){
+		$varsize0 = 0;
+	    }
+	    $sigmasize0 = sqrt($varsize0);
 	    #estimate end from the total length (not just fitted length) and growth rate
 	    $delt = ($time[$T-1]-$time[0])/($T-1);
 	    $size0max -= 0.5*$alpha*$delt;
@@ -205,8 +205,61 @@ while(<F>){
 
 	    #Take into account that size estimates are noisy?
 	    #Put error bar on fluo measurement
-	    
 
+	    #Fit log(fluorescence) as a function of log(estimated size from exponential fit against time)
+	    #Assume that there is NO OFFSET
+	    #Assumes fluorescence is proportional to size + multiplicative noise
+	    $muf = 0;
+	    $musize = 0;
+	    $varsize = 0;
+	    $varf = 0;
+	    $covar = 0;
+	    for($t=0;$t<$T;++$t){
+		$estsize = $size0max+$alphamax*($time[$t]-$time[0]);
+		$musize += $estsize;
+		$logfluo = log($fluo[$t]);
+		$muf += $logfluo;
+		$varsize += $estsize*$estsize;
+		$varf += $logfluo*$logfluo;
+		$covar += $estsize*$logfluo;
+	    }
+	    $musize /= $T;
+	    $muf /= $T;
+	    $loglam = $muf-$musize;
+
+	    $covar /= $T;
+	    $varsize /= $T;
+	    $varf /= $T;
+	    $covar  -= $musize*$muf;
+	    $varsize -= $musize*$musize;
+	    $varf -= $muf*$muf;
+	    $errloglam = sqrt(($varsize+$varf-2*$covar)/$T);
+
+	    #Fit fluorescence as a function of estimated size from exponential fit against time
+	    #Assume that there is NO OFFSET
+	    #Assumes fluorescence is proportional to size + constant noise
+	    $muf = 0;
+	    $musize = 0;
+	    $varsize = 0;
+	    $varf = 0;
+	    $covar = 0;
+	    for($t=0;$t<$T;++$t){
+		$estsize = exp($size0max+$alphamax*($time[$t]-$time[0]));
+		$musize += $estsize;
+		$ffll = $fluo[$t];
+		$muf += $ffll;
+		$varsize += $estsize*$estsize;
+		$varf += $ffll*$ffll;
+		$covar += $estsize*$ffll;
+	    }
+	    $musize /= $T;
+	    $muf /= $T;
+	    $covar /= $T;
+	    $varsize /= $T;
+	    $varf /= $T;
+	    $lam = $covar/$varsize;
+	    $errlam = sqrt(($varf/$varsize - $lam*$lam)/$T);
+	    
 	    #Fit fluorescence as a function of time (linear again)
 	    $mut = 0;
 	    $vart = 0;
@@ -231,7 +284,7 @@ while(<F>){
 	    $avpos /= $T;
 
 	    	    	    
-	    print "$celline $mintop $avpos $avnumfrombottom $Tee $rmax $alphamax $sigmaslope $size0max $endsize $sigmasize0 $dsize $sigmadsize $startfluo $endfluo $rfluo $fluoslope $fluozero $startfluosize $endfluosize $rfluotime $fluoslopetime $startfluotime $endfluotime\n";
+	    print G "$celline $mintop $avpos $avnumfrombottom $Tee $rmax $alphamax $sigmaslope $size0max $endsize $sigmasize0 $dsize $sigmadsize $startfluo $endfluo $rfluo $fluoslope $fluozero $startfluosize $endfluosize $rfluotime $fluoslopetime $startfluotime $endfluotime $loglam $errloglam $lam $errlam\n";
 	}
 
 	#deal with the new line with cell info
@@ -285,25 +338,6 @@ while(<F>){
 	$avnumfrombottom += ($s[4]-$s[3]);
     }	
 }
-# close(G); 
+close(G); 
 
-# open(G,$residfile);
-print "\n\n\n>RESIDUALS\n";
 
-for($t=0;$t<100;++$t){
-    if($countbegin[$t] > 0){
-	$resbegin[$t] /= $countbegin[$t];
-    }
-    if($countend[$t] > 0){
-	$resend[$t] /= $countend[$t];
-    }
-    if($countbeginbot[$t] > 0){
-	$resbeginbot[$t] /= $countbeginbot[$t];
-    }
-    if($countendbot[$t] > 0){
-	$resendbot[$t] /= $countendbot[$t];
-    }
-    
-    print $t, "\t", $countbegin[$t], "\t", $resbegin[$t], "\t", $countend[$t], "\t", $resend[$t], "\t", $countbeginbot[$t], "\t", $resbeginbot[$t], "\t", $countendbot[$t], "\t", $resendbot[$t],"\n";
-}
-# close(G);
