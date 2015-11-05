@@ -15,9 +15,9 @@ scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
 scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1")
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 scale_colour_periodic_brewer <-
-  function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
+  function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000))
 scale_fill_periodic_brewer <- function(...) 
-  scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
+  scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000))
 scale_shape_periodic <- function(...) 
   scale_shape_manual(..., values = rep(15:18, 5))
 
@@ -162,6 +162,14 @@ compute_genealogy <- function(.id, .pid, .dgtype) {
     }
   }
   return(.cid[.all_id+1])
+}
+
+get_parent_cid <- function(.cid) {
+  stri_sub(.cid, to=-2)
+}
+
+get_daughters_cid <- function(.cid) {
+  paste0(.cid, c('B', 'T'))
 }
 
 
