@@ -2,7 +2,7 @@ suppressPackageStartupMessages( {
   library(Hmisc)
   library(tools)
   library(stringr)
-  # library(tidyr)
+  library(tidyr)
   library(dplyr)
   
   library(ggplot2)
@@ -11,13 +11,13 @@ suppressPackageStartupMessages( {
 } )
 
 theme_set(theme_bw())
-scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
-scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1")
+scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1", na.value='gray50')
+scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.value='gray50')
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 scale_colour_periodic_brewer <-
-  function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000))
+  function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000), na.value='gray25')
 scale_fill_periodic_brewer <- function(...) 
-  scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000))
+  scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000), na.value='gray25')
 scale_shape_periodic <- function(...) 
   scale_shape_manual(..., values = rep(15:18, 5))
 
@@ -60,8 +60,7 @@ load_timm_data <- function(.path, .scripts_path,
     if (.verbose) print(paste("Converting", .path))
     # erik's scripts work only in the working dir
     if (!file.copy(.path, .name, overwrite=TRUE, copy.mode=FALSE)) stop(paste(.path, 'cannot be copied.'))
-    .out_frames_path <- system2(.perl_cmd, args=c(.frames_script_path, .name, "0"), stdout=TRUE) %>%
-      sub('^>', '', .)
+    .out_frames_path <- system2(.perl_cmd, args=c(.frames_script_path, .name, "0"), stdout=TRUE) %>% sub('^>', '', .)
     if (!file.exists(.out_frames_path)) stop("Frames file cannot be found.")
   
     if (.verbose) print(paste("Converting", .out_frames_path))
@@ -174,12 +173,13 @@ get_daughters_cid <- function(.cid) {
 
 
 which_touch_exit <- function(.h, .hmin_cutoff) {
+  # browser()
   .t <- which(.h<.hmin_cutoff)
   if (length(.t) == 0) {
     return(rep(FALSE, length(.h)))
   } else {
-    return(c(rep(FALSE, .t[1]),
-             rep(TRUE, length(.h)-.t[1])))
+    return(c(rep(FALSE, .t[1]-1),
+             rep(TRUE, length(.h)-.t[1]+1)))
   }
 }
 
@@ -188,8 +188,20 @@ which_to_progeny <- function(.x, .cid) {
   .df <- data.frame(x=.x, cid=.cid)
   .out <- .x
   .cs <- group_by(.df, cid) %>% 
-           summarise(any=any(x)) %>%
-           filter(any) %>% select(cid) %>% unlist %>% as.character
+    summarise(any=any(x)) %>%
+    filter(any) %>% select(cid) %>% unlist %>% as.character
+  for (.c in .cs) {
+    .is_daughter <- str_detect(.cid, paste0(.c, ".+"))
+    .out[.is_daughter] <- TRUE
+  }
+  return(.out)  
+}
+
+which_to_progeny <- function(.x, .cid) {
+#   browser()
+  .df <- data.frame(x=.x, cid=.cid)
+  .out <- .x
+  .cs <- unique(.cid[which(.x)])
   for (.c in .cs) {
     .is_daughter <- str_detect(.cid, paste0(.c, ".+"))
     .out[.is_daughter] <- TRUE
