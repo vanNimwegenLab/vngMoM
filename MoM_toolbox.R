@@ -39,62 +39,61 @@ as_numeric_df <- function(.d) modifyList(.d, lapply(.d, as_numeric))
 
 load_timm_data <- function(.path, .scripts_path, 
                            .perl_cmd='perl',
-                           .frames_script="get_size_and_fluo.pl", 
-                           .cells_script="estimate_division_growth.pl", 
+                           .frames_script="get_size_and_fluo_basic.pl", 
+                           # .cells_script="estimate_division_growth.pl", 
                            .force=FALSE, .verbose=FALSE,
                            .data2preproc=identity) {
   if (!file.exists(.path)) stop("input path is not valid.")
   .dir <- dirname(.path)
   .name <- basename(.path)
   .frames_script_path <- file.path(.scripts_path, .frames_script)
-  .cells_script_path <- file.path(.scripts_path, .cells_script)
+  # .cells_script_path <- file.path(.scripts_path, .cells_script)
   .outdir <- .dir %>% .data2preproc
   dir.create(.outdir, recursive=TRUE, showWarnings=FALSE)
   .outbase <- basename(.path) %>% sub("ExportedCellStats_", "", .) %>% file_path_sans_ext
   .frames_path <- paste0(.outbase, "_frames.txt") %>% file.path(.outdir, .)
-  .cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
+  # .cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
   # browser()
 
   # run perl scripts if output doesn't exist
-  if (!file.exists(.frames_path) || !file.exists(.cells_path) || .force==TRUE) {
+  if (!file.exists(.frames_path) || .force==TRUE) { # || !file.exists(.cells_path) 
     if (.verbose) print(paste("Converting", .path))
     # erik's scripts work only in the working dir
     if (!file.copy(.path, .name, overwrite=TRUE, copy.mode=FALSE)) stop(paste(.path, 'cannot be copied.'))
-    .out_frames_path <- system2(.perl_cmd, args=c(.frames_script_path, .name, "0"), stdout=TRUE) %>% sub('^>', '', .)
+    .out_frames_path <- system2(.perl_cmd, args=c(.frames_script_path, .name), stdout=TRUE) %>% sub('^>', '', .)
     if (!file.exists(.out_frames_path)) stop("Frames file cannot be found.")
   
-    if (.verbose) print(paste("Converting", .out_frames_path))
-    .out_cells_path <- system2(.perl_cmd, args=c(.cells_script_path, .out_frames_path), stdout=TRUE) %>%
-      sub('^>', '', .)
+#     if (.verbose) print(paste("Converting", .out_frames_path))
+#     .out_cells_path <- system2(.perl_cmd, args=c(.cells_script_path, .out_frames_path), stdout=TRUE) %>% sub('^>', '', .)
     
     # housekeeping
     file.rename(.out_frames_path, .frames_path)
-    file.rename(.out_cells_path, .cells_path)
-    file.remove(.name, .out_frames_path, .out_cells_path)
+    # file.rename(.out_cells_path, .cells_path)
+    file.remove(.name, .out_frames_path) #, .out_cells_path
   }
   
   .frames_out <- parse_frames_stats(.frames_path) %>%
     rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
     mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
     
-  .cells_out <- read.table(.cells_path, comment.char="", header=TRUE) %>%
-    select(-1)
-  names(.cells_out) <- names(.cells_out) %>% 
-    gsub("X\\.", "", .) %>%
-    gsub("\\.", "_", .)
-  .cells_out <- .cells_out %>%
-    rename(id=cellID, parent_id=parID) %>%
-    select(-daughter_type) %>%
-    inner_join(select(.frames_out, id, cid) %>% group_by(id) %>% slice(1), by='id')
-    
-  .frames_out <- .frames_out %>%
-    left_join(select(.cells_out, -parent_id, -end_type, -cid), by='id')
+#   .cells_out <- read.table(.cells_path, comment.char="", header=TRUE) %>%
+#     select(-1)
+#   names(.cells_out) <- names(.cells_out) %>% 
+#     gsub("X\\.", "", .) %>%
+#     gsub("\\.", "_", .)
+#   .cells_out <- .cells_out %>%
+#     rename(id=cellID, parent_id=parID) %>%
+#     select(-daughter_type) %>%
+#     inner_join(select(.frames_out, id, cid) %>% group_by(id) %>% slice(1), by='id')
+#     
+#   .frames_out <- .frames_out %>%
+#     left_join(select(.cells_out, -parent_id, -end_type, -cid), by='id')
   
-  if (dim(.cells_out)[1] > 0) {
+  # if (dim(.cells_out)[1] > 0) {
     .m <- str_match(basename(.path), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*")
-    return( list(cells=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .cells_out),
+    return( list(#cells=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .cells_out),
                  frames=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .frames_out)) )
-  }
+  # }
 }
 
 parse_frames_stats <- function(.path) {
@@ -102,12 +101,12 @@ parse_frames_stats <- function(.path) {
   # browser()
 
   # find column names for stats
-  .fieldnames <- str_split(flines[1], '\t')[[1]] %>% sub("#", "", .) %>%
+  .fieldnames <- str_split(flines[1], '[ \t]+')[[1]] %>% sub("#", "", .) %>%
     gsub(" ", "", .) %>%
     gsub("-", "_", .) %>%
     gsub("\\(", "_", .) %>%
     gsub("\\)", "", .)
-  .colnames <- str_split(flines[2], '\t')[[1]] %>% sub("#", "", .) %>%
+  .colnames <- str_split(flines[2], '[ \t]+')[[1]] %>% sub("#", "", .) %>%
     gsub(" ", "", .) %>%
     gsub("-", "_", .) %>%
     gsub("\\(", "_", .) %>%
@@ -123,11 +122,11 @@ parse_frames_stats <- function(.path) {
                       textConnection %>% read.table(comment.char="", header=FALSE) %>% # read table
                       setNames(.colnames)
                     .info <- flines[id_lines[.i-1]] %>% # extract line
-                      strsplit('\t') %>% .[[1]] %>%     # split to vector
+                      strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
                       .[-1] %>% t %>% data.frame(stringsAsFactors=FALSE) %>%    # convert to df
                       setNames(.fieldnames[-1]) %>%
                       mutate(cell_ID=as.numeric(cell_ID), parent_ID=as.numeric(parent_ID), 
-                             first_time_sec=as.numeric(first_time_sec), last_time_sec=as.numeric(last_time_sec))
+                             first_frame=as.numeric(first_frame), last_frame=as.numeric(last_frame))
                     cbind(.info, .df)
                   }) )
   return(.out)
@@ -181,20 +180,6 @@ which_touch_exit <- function(.h, .hmin_cutoff) {
     return(c(rep(FALSE, .t[1]-1),
              rep(TRUE, length(.h)-.t[1]+1)))
   }
-}
-
-which_to_progeny <- function(.x, .cid) {
-  # browser()
-  .df <- data.frame(x=.x, cid=.cid)
-  .out <- .x
-  .cs <- group_by(.df, cid) %>% 
-    summarise(any=any(x)) %>%
-    filter(any) %>% select(cid) %>% unlist %>% as.character
-  for (.c in .cs) {
-    .is_daughter <- str_detect(.cid, paste0(.c, ".+"))
-    .out[.is_daughter] <- TRUE
-  }
-  return(.out)  
 }
 
 which_to_progeny <- function(.x, .cid) {
