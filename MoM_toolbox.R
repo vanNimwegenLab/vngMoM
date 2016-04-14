@@ -41,12 +41,6 @@ scale_y_hours <- function(.dh=6, ...) {
 }
 sec_to_h_trans <- function() trans_new("sec_to_h", function(.x) .x/3600, function(.x) .x*3600)
 
-# multidplyr utility ####
-# cluster_assign_obj <- function(cl, x) {
-#   name <- as.character(substitute(x))
-#   stopifnot(exists(name))
-#   cluster_assign_value(cl, name, x)
-# }
 cluster_assign_obj <- function(.cl, ...) {
   .xs <- list(...)
   .ns <- as.character(eval(substitute(alist(...))))
@@ -57,11 +51,6 @@ cluster_assign_obj <- function(.cl, ...) {
   return(.cl)
 }
 
-# cluster_assign_func <- function(cl, f) {
-#   fname <- as.character(substitute(f))
-#   stopifnot(is.function(f))
-#   cluster_assign_value(cl, fname, f)
-# }
 cluster_assign_func <- function(.cl, ...) {
   .fs <- list(...)
   .ns <- as.character(eval(substitute(alist(...))))
@@ -72,13 +61,36 @@ cluster_assign_func <- function(.cl, ...) {
   return(.cl)
 }
 
-
 # general convenience functions ####
 between_or <- function(.x, .a, .b) {
   if (length(.a) != length(.b)) error('.a and .b must have the same length.')
   lapply(seq(length(.a)), function(.i) between(.x, .a[.i], .b[.i])) %>%
     do.call(cbind, .) %>%
     apply(1, any)
+}
+
+value_occurence_index <- function(.m) {
+  # value_occurence_index returns the index of each occurence of a vector level
+  .m <- factor(.m)
+  .out <- NA
+  for (.l in levels(.m)) {
+    .idx <- which(.m==.l)
+    .out[.idx] <- 1:length(.idx)
+  }
+  return(.out)
+}
+
+find_unique_interval <- function(.xs, .mins, .maxs) {
+# find_unique_interval() returns the indices of the interval (defined by [.mins, .maxs]) matching 
+# each value of .xs (provided it is unique)
+  if (length(.mins) != length(.maxs)) stop(".mins and .maxs have different lengths!")
+  .out <-  lapply(seq(length(.mins)), function(.i) between(.xs, .mins[.i], .maxs[.i])) %>% 
+    do.call(cbind, .) %>%
+    apply(1, which)
+  .ls <- sapply(.out, length) 
+  if (any(.ls > 1)) warning('some .xs values are matched by several intervals.')
+  .out[.ls!=1] <- NA
+  return(unlist(.out))
 }
 
 as_numeric <- function(.x) as.numeric(as.character(.x))

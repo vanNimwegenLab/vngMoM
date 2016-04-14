@@ -15,13 +15,13 @@ r_scripts_path <- c("~/Documents/Biozentrum/Projects/vngWetLabR/mother_machine",
 perl_scripts_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/mother_machine"
 data2preproc <- function(.d) sub('/data/*', '/preproc/', .d) # store cache file in preproc subdir
 
-date_cond <- c("20160318"="lac_lowillum")
-
 condition_ts <- rbind(data.frame(duration=1440, medium='lactose', condition='lac_lowillum') #,
                       # data.frame(duration=c(360, 240, 240, 240, 240, 240),
                       #            medium=c('glucose', 'lactose', 'glucose', 'lactose', 'glucose', 'lactose'),
                       #            condition='switch_4h')
 )
+
+date_cond <- c("20160318"="lac_lowillum")
 
 # # save environment (but `pls`)
 # myvars <- ls(all.names = TRUE)
@@ -53,8 +53,9 @@ Load all frames in a dataframe:
 
 ```{r}
 condition_ts <- condition_ts %>% group_by(condition) %>% 
-  mutate(t_start=cumsum(c(0, duration[-(length(duration))])),
-         t_end=cumsum(duration))
+  mutate(t_start=cumsum(c(0, duration[-(length(duration))])) * 60,
+         t_end=cumsum(duration) * 60 - 1e-5,
+         mcycle=value_occurence_index(medium))
 
 myfiles <- list.files("./data", ".*\\d+\\.csv", recursive=TRUE, full.names=TRUE)
 nc <- min(length(myfiles), length(mycluster)) # this is a dirty hack because multiplyr crashes with less shards than cores
@@ -92,7 +93,15 @@ myframes <- dplyr::data_frame(path=myfiles) %>%
   ungroup %>% 
   mutate(condition=date_cond[as.character(date)],
          vertical_center=(vertical_bottom + vertical_top)/2,
-         cell=paste(date, pos, gl, id, sep='.'))
+         cell=paste(date, pos, gl, id, sep='.')) %>% 
+  # propagate medium values
+  group_by(condition) %>% 
+  do((function(.df){
+    .ts <- filter(condition_ts, condition==unique(.df$condition))
+    .idx <- find_unique_interval(.df$time_sec, .ts$t_start, .ts$t_end)
+    mutate(.df, medium=.ts$medium[.idx],
+           mcycle=.ts$mcycle[.idx])
+  })(.))  
 
 autofluo_per_um <- 422.8 / 8
 fp_per_dn <- 1
