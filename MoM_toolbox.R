@@ -354,3 +354,112 @@ genealogy_relationship <- function(.s, .dist_max=3) {
 }
 
 
+# plotting tracks ####
+
+plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec', 
+                                    .cell_col='id', .parent_col='parent_id', .facet_col='b_rank', 
+                                    .log=FALSE, .col=NA, .show_cellid=FALSE, .show_all=FALSE, 
+                                    .facet_labeller=NULL, .gg_theme=theme_get()) {
+  
+  .df_div <- .df %>% group_by_(.cell_col) %>% 
+    do((function(.dfgl, .dfc) { # compute_div_between_facets
+      # .dfgl: dataframe of the entire GL
+      # .dfc: dataframe of the current cell
+      if (unique(.dfc[[.parent_col]]) < 0) return(data.frame())
+      .dfp <- filter_(.dfgl, lazyeval::interp(~ cell_id == unique(parent_id), 
+                                      cell_id=as.name(.cell_col), parent_id=.dfc[[.parent_col]]))
+      if (dim(.dfp)[1] == 0) return(data.frame())
+      
+      if (unique(.dfc[[.facet_col]]) == unique(.dfp[[.facet_col]])) {
+        .varp <- filter_(.dfp, sprintf('%s==max(%s)', .time_col, .time_col))[[.var_col]]
+        .out <- filter_(.dfc, sprintf('%s==min(%s)', .time_col, .time_col)) %>% 
+          select_(.cell_col, .facet_col, .time_col, .var_col) %>%
+          mutate_(.dots=list(lazyeval::interp(~tvar-dt*60, tvar=as.name(.time_col), dt=dt), 
+                             lazyeval::interp(~.varp, .varp=.varp)) %>% 
+                    setNames(paste0(c(.time_col, .var_col), 'p')))
+      }
+      if (unique(.dfc[[.facet_col]]) > unique(.dfp[[.facet_col]])) {
+        .out <- bind_rows(
+          filter_(ungroup(.dfc), sprintf('%s==min(%s)', .time_col, .time_col)) %>%
+            select_(.cell_col, .facet_col, .time_col, .var_col) %>%
+            mutate_(.dots=list(lazyeval::interp(~tvar-dt*60/2, tvar=as.name(.time_col), dt=dt), as.character(ifelse(.log, 0, -Inf))) %>% 
+                      setNames(paste0(c(.time_col, .var_col), 'p'))) ,
+          filter_(ungroup(.dfp), sprintf('%s==max(%s)', .time_col, .time_col)) %>%
+            select_(.cell_col, .facet_col, .time_col, .var_col) %>%
+            mutate_(.dots=list(lazyeval::interp(~tvar+dt*60/2, tvar=as.name(.time_col), dt=dt), "Inf") %>% 
+                      setNames(paste0(c(.time_col, .var_col), 'p')))
+        )
+        if(diff(.out[[.facet_col]]) < -1) {
+          .out <- rbind(.out,
+                        data.frame(id=unique(.dfc$id), seq(min(.out[[.facet_col]])+1, max(.out[[.facet_col]])-1),
+                                   time=min(.dfc[[.time_col]])-dt*60/2, 
+                                   timep=min(.dfc[[.time_col]])-dt*60/2,
+                                   var=ifelse(.log, 0, -Inf), varp=Inf) %>% 
+                          setNames(c(.cell_col, .facet_col, .time_col, paste0(.time_col, 'p'), .var_col, paste0(.var_col, 'p'))) )
+        }
+      }
+      return(.out)
+    })(.df, .))
+
+  .facet_min <- min(.df[[.facet_col]])
+  .facet_max <- max(.df[[.facet_col]])
+  
+  .pl <- ggplot() +
+    # facets alternated background
+    geom_rect(aes(xmin=-Inf, xmax=Inf, ymin=ifelse(.log, 0, -Inf), ymax=Inf), alpha=.05, 
+              data=data.frame(seq(.facet_min, .facet_max, 2)) %>% setNames(.facet_col)) +
+    # theme(.gg_theme, complete=TRUE) +
+    theme(panel.margin = unit(0, "lines"), panel.border=element_blank()) # ,strip.background = element_blank(), strip.text = element_blank()
+  
+  if (is.null(.facet_labeller)) {
+    .pl <- .pl + facet_grid(reformulate('.', .facet_col), as.table=FALSE)
+  } else {
+    .pl <- .pl + facet_grid(reformulate('.', .facet_col), as.table=FALSE, labeller=as_labeller(.facet_labeller))
+  }
+  
+  if (is.na(.col)) {
+    #  use cell id to colour cells
+    .pl <- .pl + 
+      # show divisions (lty='11' means densely dotted line using hex notation)
+      geom_segment(aes_(x=as.name(.time_col), xend=as.name(paste0(.time_col, 'p')), 
+                        y=as.name(.var_col), yend=as.name(paste0(.var_col, 'p')), 
+                        col=lazyeval::interp(~factor(id), id=as.name(.cell_col)) ), 
+                   alpha=.3, lty='11', data=.df_div) +
+      # show cell traces
+      geom_path(aes_(as.name(.time_col), as.name(.var_col), col=lazyeval::interp(~factor(id), id=as.name(.cell_col))), data=.df) +
+      scale_colour_periodic_brewer(guide='none')
+    
+    # show cell numbers
+    if (.show_cellid)
+      .pl <- .pl + geom_text(aes_(as.name(.time_col), as.name(.var_col), label=as.name(.cell_col), 
+                                  col=lazyeval::interp(~factor(id), id=as.name(.cell_col))), 
+                             size=2, hjust=0, vjust=1, data=.df %>% group_by_(.cell_col) %>% filter(row_number()==1) )
+    # show all traces in one panel
+    if (.show_all)
+      .pl <- .pl + geom_path(aes_(as.name(.time_col), as.name(.var_col), col=lazyeval::interp(~factor(id), id=as.name(.cell_col))), 
+                             data=.df %>% mutate_(.dots=list("-1") %>% setNames(.facet_col)) )
+  } else {
+    #  case of fixed colour
+    .pl <- .pl + 
+      # show divisions (lty='11' means densely dotted line using hex notation)
+      geom_segment(aes_(x=as.name(.time_col), xend=as.name(paste0(.time_col, 'p')), 
+                        y=as.name(.var_col), yend=as.name(paste0(.var_col, 'p'))), 
+                   col=.col, alpha=.3, lty='11', data=.df_div) +
+      # show cell traces
+      geom_path(aes_(as.name(.time_col), as.name(.var_col), group=as.name(.cell_col)), col=.col, data=.df)
+    
+    # show cell numbers
+    if (.show_cellid)
+      .pl <- .pl + geom_text(aes_(as.name(.time_col), as.name(.var_col), label=as.name(.cell_col)), size=2, hjust=0, vjust=1,
+                             data=.df %>% group_by_(.cell_col) %>% filter(row_number()==1) )
+    # show all traces in one panel
+    if (.show_all)
+      .pl <- .pl + geom_path(aes_(as.name(.time_col), as.name(.var_col), group=as.name(.cell_col)), col=.col, 
+                             data=.df %>% mutate_(.dots=list("-1") %>% setNames(.facet_col)) )
+  }
+  
+  if(.log) .pl <- .pl + scale_y_log10()
+  return(.pl)
+}
+
+
