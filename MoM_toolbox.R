@@ -1,6 +1,6 @@
 mylibs <- c("stats", # required to prevent hiding dplyr::filter later on
             "tools", "stringi", "stringr", "tidyr", "dplyr",
-            "ggplot2", "scales", "RColorBrewer", "gridExtra",
+            "ggplot2", "scales", "gridExtra",
             "RcppArmadillo", "ccaPP")
 invisible( suppressPackageStartupMessages( # don't use %>% before loading dplyr
   lapply(mylibs, library, character.only=TRUE) ))
@@ -10,7 +10,7 @@ theme_set(theme_bw())
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1", na.value='gray50')
 scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.value='gray50')
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
-brewer_cols <- c(brewer.pal(4, 'Set1'), 'gray42')
+brewer_cols <- c(RColorBrewer::brewer.pal(4, 'Set1'), 'gray42')
 scale_colour_periodic_brewer <-
   function(...) scale_colour_manual(..., values = rep(brewer_cols, 1000), na.value='gray25')
 scale_fill_periodic_brewer <- function(...) 
@@ -106,7 +106,7 @@ mycut <- function(.x, ...) {
 }
 
 # MoMA loading ####
-load_timm_data <- function(.path, .scripts_path, 
+load_timm_data_ini <- function(.path, .scripts_path, 
                            .perl_cmd='perl',
                            .frames_script="get_size_and_fluo_basic.pl", 
                            # .cells_script="estimate_division_growth.pl", 
@@ -123,6 +123,10 @@ load_timm_data <- function(.path, .scripts_path,
   .frames_path <- paste0(.outbase, "_frames.txt") %>% file.path(.outdir, .)
   # .cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
 
+  # if (!file.exists(.frames_path))
+  #   print(.frames_path)
+  # return(list())
+  
   # run perl scripts if output doesn't exist
   if (!file.exists(.frames_path) || .force==TRUE) { # || !file.exists(.cells_path) 
     if (.verbose) print(paste("Converting", .path))
@@ -139,7 +143,7 @@ load_timm_data <- function(.path, .scripts_path,
     # file.rename(.out_cells_path, .cells_path)
     file.remove(.name, .out_frames_path) #, .out_cells_path
   }
-  
+
   .frames_out <- parse_frames_stats(.frames_path) %>%
     rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
     mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
@@ -163,6 +167,64 @@ load_timm_data <- function(.path, .scripts_path,
                  frames=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .frames_out)) )
   # }
 }
+
+
+if (!exists("data2preproc_dir", mode="function"))
+  data2preproc_dir <- identity
+if (!exists("data2preproc_file", mode="function"))
+  data2preproc_file <- identity
+if (!exists("data2preproc", mode="function"))
+  data2preproc <- function(.path)
+    file.path(data2preproc_dir(.path), data2preproc_file(.path))
+
+process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE,
+                              .frames_sh_script="get_size_and_fluo_basic.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
+                              .qsub_name="MM_pl" # must be shorter than 10 characters
+) { # browser()
+  # check whether some files need to be preprocessed
+  .preprocessed <- .data2preproc(.x) %>% file.exists
+  if (all(.preprocessed) && !.force) {
+    return(.x) 
+  } else {
+    # call qsub
+    lapply(.x[ which(.force | !.preprocessed) ],
+           function(.f) system(sprintf("source /etc/profile.d/sge.sh; qsub -N %s -cwd %s %s %s %s", 
+                                       .qsub_name, file.path(.scripts_path, .frames_sh_script), 
+                                       file.path(.scripts_path, .frames_pl_script), .f, data2preproc(.f)))) 
+    stop("Some files required preprocessing on the cluster. Once they're processed, run the same command again\n",
+         sprintf("Hint: use `process_state(\"%s\")` to check if the processing is still running...", .qsub_name),
+         call.=FALSE)
+  }
+}
+
+process_state <- function(.qsub_name="MM_pl") {
+  .qs <- system("source /etc/profile.d/sge.sh; qstat", intern=TRUE) 
+  
+  if (length(.qs) == 0) {
+    return("All jobs have been processed.")
+  } else {
+    paste(.qs[-2], collapse='\n') %>% read_table() %>%
+      filter(name==.qsub_name) %>%
+      group_by(state) %>% summarise(n_jobs=n()) %>% 
+      rowwise() %>% 
+      mutate(msg=sprintf('%d job(s) in state %s', n_jobs, state)) %>% 
+      .[['msg']] %>% paste(collapse='\n') %>% 
+      ifelse(nchar(.)==0, 'All jobs have been processed.', .)
+  }
+}
+
+load_moma_processed <- function(.path, .verbose=FALSE) {
+  if (!file.exists(.path)) stop("input path is not valid.")
+
+  .frames_out <- parse_frames_stats(.path) %>%
+    rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
+    mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
+  .m <- str_match(basename(.path), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*")
+  
+  data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), 
+             .frames_out)
+}
+
 
 parse_frames_stats <- function(.path) {
   flines <- readLines(.path)
@@ -294,6 +356,10 @@ get_parent_cid <- function(.cid) {
   stri_sub(.cid, to=-2)
 }
 
+get_all_parents_cid <- function(.cid) {
+  stri_sub(.cid, to=-(2:nchar(.cid))) 
+}
+
 get_daughters_cid <- function(.cid) {
   paste0(.cid, c('B', 'T'))
 }
@@ -316,6 +382,36 @@ genealogy_ontology <- function(.div_min, .div_max) {
     .rel <- 'niece'
   }
   return(.rel)
+}
+
+convert_genealogy_to_poleline <- function(.s, .bottom_char='B', .top_char='T') {
+# convert_genealogy_to_poleline() converts a B/T genealogy string (bottom/top) 
+# to an O/N one (old pole/new pole cell). It relies on the fact that the old pole cell is 
+# on the same side during two consecutive divisions, e.g. for 0BTTBTTT:
+#  (0)BTTBTT(T)  B/T genealogy
+# (0B)TTBTTT     same, shifted by one letter
+#   0BNONNOO     result (O for identical letters, N for different ones)
+  .ss <- sprintf('[%s%s]+', .bottom_char, .top_char) %>% str_match(.s, .) %>% strsplit('')
+  .p <- lapply(.ss, function(.x) (.x[-length(.x)] == .x[-1]) %>% ifelse('O', 'N') %>% paste(collapse='')) %>% unlist
+  
+  .pos <- sprintf('[%s%s]+', .bottom_char, .top_char) %>% str_locate(.s, .) %>% .[,'start']
+  paste0(str_sub(.s, 0, .pos), .p)
+}
+
+get_pole_age <- function(.s, .old_char='O', .new_char='N') {
+# get_pole_age() computes the number of consecutive identical letters at the end of the string
+# for old pole cells, the age is positive (number of consecutive division inheriting the old pole)
+# for new pole cells, the age is negative (number of consecutive division inheriting the youngest old pole)
+  .bs <- paste0(.old_char, '+$') %>% str_match(.s, .) %>% str_length
+  .ts <- paste0(.new_char, '+$') %>% str_match(.s, .) %>% str_length
+  return( ifelse(is.na(.bs), -.ts, .bs) )
+}
+
+get_divs_from_mothercell <- function(.s, .old_char='B', .new_char='T') {
+# get_divs_from_mothercell() computes the number of divisions since the cell's ancestor was the mother cell of the GL
+  .m_length <- sprintf('[^%s%s](%s+)', .old_char, .new_char, .old_char) %>% str_match(.s, .) %>% .[,2] %>% str_length
+  .s_length <- sprintf('[%s%s]+', .old_char, .new_char) %>% str_match(.s, .) %>% str_length
+  return( .s_length - .m_length )
 }
 
 genealogy_relationship <- function(.s, .dist_max=3) {
