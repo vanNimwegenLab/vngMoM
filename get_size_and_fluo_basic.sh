@@ -1,6 +1,8 @@
 #!/bin/bash
 #$ -l runtime=2:00:00 
 #$ -l membycore=2G 
+#$ -o qlogs/$JOB_NAME.o$JOB_ID
+#$ -e qlogs/$JOB_NAME.e$JOB_ID
 
 # syntax: get_size_and_fluo_basic.sh ./path/to/get_size_and_fluo_basic.pl ./path/to/input ./path/to/output
 

@@ -1,5 +1,5 @@
 mylibs <- c("stats", # required to prevent hiding dplyr::filter later on
-            "tools", "stringi", "stringr", "tidyr", "dplyr",
+            "tools", "stringi", "stringr", "tidyr", "dplyr", # "readr",
             "ggplot2", "scales", "gridExtra",
             "RcppArmadillo", "ccaPP")
 invisible( suppressPackageStartupMessages( # don't use %>% before loading dplyr
@@ -11,6 +11,7 @@ scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1", 
 scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.value='gray50')
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 brewer_cols <- c(RColorBrewer::brewer.pal(4, 'Set1'), 'gray42')
+brewer_all_cols <- RColorBrewer::brewer.pal(9, 'Set1')
 scale_colour_periodic_brewer <-
   function(...) scale_colour_manual(..., values = rep(brewer_cols, 1000), na.value='gray25')
 scale_fill_periodic_brewer <- function(...) 
@@ -106,69 +107,6 @@ mycut <- function(.x, ...) {
 }
 
 # MoMA loading ####
-load_timm_data_ini <- function(.path, .scripts_path, 
-                           .perl_cmd='perl',
-                           .frames_script="get_size_and_fluo_basic.pl", 
-                           # .cells_script="estimate_division_growth.pl", 
-                           .force=FALSE, .verbose=FALSE,
-                           .data2preproc=identity) {
-  if (!file.exists(.path)) stop("input path is not valid.")
-  .dir <- dirname(.path)
-  .name <- basename(.path)
-  .frames_script_path <- file.path(.scripts_path, .frames_script)
-  # .cells_script_path <- file.path(.scripts_path, .cells_script)
-  .outdir <- .dir %>% .data2preproc
-  dir.create(.outdir, recursive=TRUE, showWarnings=FALSE)
-  .outbase <- basename(.path) %>% sub("ExportedCellStats_", "", .) %>% file_path_sans_ext
-  .frames_path <- paste0(.outbase, "_frames.txt") %>% file.path(.outdir, .)
-  # .cells_path <- paste0(.outbase, "_cells.txt") %>% file.path(.outdir, .)
-
-  # if (!file.exists(.frames_path))
-  #   print(.frames_path)
-  # return(list())
-  
-  # run perl scripts if output doesn't exist
-  if (!file.exists(.frames_path) || .force==TRUE) { # || !file.exists(.cells_path) 
-    if (.verbose) print(paste("Converting", .path))
-    # erik's scripts work only in the working dir
-    if (!file.copy(.path, .name, overwrite=TRUE, copy.mode=FALSE)) stop(paste(.path, 'cannot be copied.'))
-    .out_frames_path <- system2(.perl_cmd, args=c(.frames_script_path, .name), stdout=TRUE) %>% sub('^>', '', .)
-    if (!file.exists(.out_frames_path)) stop("Frames file cannot be found.")
-  
-#     if (.verbose) print(paste("Converting", .out_frames_path))
-#     .out_cells_path <- system2(.perl_cmd, args=c(.cells_script_path, .out_frames_path), stdout=TRUE) %>% sub('^>', '', .)
-    
-    # housekeeping
-    file.rename(.out_frames_path, .frames_path)
-    # file.rename(.out_cells_path, .cells_path)
-    file.remove(.name, .out_frames_path) #, .out_cells_path
-  }
-
-  .frames_out <- parse_frames_stats(.frames_path) %>%
-    rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
-    mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
-    
-#   .cells_out <- read.table(.cells_path, comment.char="", header=TRUE) %>%
-#     select(-1)
-#   names(.cells_out) <- names(.cells_out) %>% 
-#     gsub("X\\.", "", .) %>%
-#     gsub("\\.", "_", .)
-#   .cells_out <- .cells_out %>%
-#     rename(id=cellID, parent_id=parID) %>%
-#     select(-daughter_type) %>%
-#     inner_join(select(.frames_out, id, cid) %>% group_by(id) %>% slice(1), by='id')
-#     
-#   .frames_out <- .frames_out %>%
-#     left_join(select(.cells_out, -parent_id, -end_type, -cid), by='id')
-  
-  # if (dim(.cells_out)[1] > 0) {
-    .m <- str_match(basename(.path), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*")
-    return( list(#cells=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .cells_out),
-                 frames=data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), .frames_out)) )
-  # }
-}
-
-
 if (!exists("data2preproc_dir", mode="function"))
   data2preproc_dir <- identity
 if (!exists("data2preproc_file", mode="function"))
@@ -203,19 +141,20 @@ process_state <- function(.qsub_name="MM_pl") {
   if (length(.qs) == 0) {
     return("All jobs have been processed.")
   } else {
-    paste(.qs[-2], collapse='\n') %>% read_table() %>%
+    paste(.qs[-2], collapse='\n') %>% readr::read_table() %>%
       filter(name==.qsub_name) %>%
       group_by(state) %>% summarise(n_jobs=n()) %>% 
       rowwise() %>% 
       mutate(msg=sprintf('%d job(s) in state %s', n_jobs, state)) %>% 
       .[['msg']] %>% paste(collapse='\n') %>% 
-      ifelse(nchar(.)==0, 'All jobs have been processed.', .)
+      ifelse(nchar(.)==0, 'No job currently being processed.', .)
   }
 }
 
 load_moma_processed <- function(.path, .verbose=FALSE) {
+  # if (.path =='./preproc/20150616/20150616_pos2_preproc_ready_GL07_frames.txt') browser()
+  # print(.path)
   if (!file.exists(.path)) stop("input path is not valid.")
-
   .frames_out <- parse_frames_stats(.path) %>%
     rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
     mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
@@ -558,4 +497,138 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
   return(.pl)
 }
 
+
+
+compute_growth_lag <- function(.ls, .numerical_check=FALSE, .plot=FALSE) {
+  PH <- function(delta,T,tau,z,c){
+    return((mean((z-delta*c)**2))**((1-T)/2))
+  }
+  
+  C <- function(T,tau){
+    C <- c()
+    for(i in 1:T){
+      if(i>tau){
+        C=append(C,i-tau-(T-tau)*(1+T-tau)/(2*T) )
+      }else{
+        C=append(C,-(T-tau)*(1+T-tau)/(2*T) )
+      }
+    }
+    return(C)
+  }
+  
+  ##Integration
+  LinInt <- function(LogVecPH,delta){
+    #Trapezioidal rule on log data and then exponentiate them    
+    vecPH.lm = lm(LogVecPH~delta)#linear model
+    coeff=coefficients(vecPH.lm)
+    return((exp(coeff[1]+coeff[2]*max(delta))-exp(coeff[1]+coeff[2]*min(delta)))/coeff[2] )
+  }
+  
+  PHIntegrate <- function(T,tau,z,c,Lntimes,Rntimes, .verbose=FALSE){
+    # Take exp(log(x)) linearize log(x) and integrate it between min and may. 
+    # Then since in log space = ax+b the result of the integral reads exp(ax+b)/a    
+    delta <- seq(0,0.5,0.001)
+    fun <- sapply(delta,PH,tau=tau,c=c,z=z,T=T)    
+    LogVecPH <- sapply(fun,log)
+    peak <- which(LogVecPH==max(LogVecPH))#Find the peack, NB length of delta and LogVecPH is the same
+    #find a better interval than the delta interval guessed.
+    Rstep <- (length(delta)-peak)%/%Rntimes;
+    if(abs(LinInt(LogVecPH[(length(delta)-Rstep):length(delta)],delta[(length(delta)-Rstep):length(delta)]))>10**(-2)) { 
+      if(.verbose) warning("error in integration, delta to short");
+      return(NA) #Error if integral relevant for delta>0.3
+    }
+    
+    j <- 0;
+    for(i in seq(peak,length(delta),Rstep)){
+      j=j+1;
+      if(abs(LinInt(LogVecPH[i:(i+Rstep)],delta[i:(i+Rstep)]))>10**(-2)&&j==Rntimes){if(.verbose)warning("The delta is to short!");return(NA)}
+      if(abs(LinInt(LogVecPH[i:(i+Rstep)],delta[i:(i+Rstep)]))>10**(-2)){next;#as the integrals smaller than 10**(-2) neglect, re save delta and logvecph in the interesting region
+      }else{delta <- delta[1:i];LogVecPH <- LogVecPH[1:i]; break}
+    }
+    
+    #integrate
+    integral <- 0;
+    Lstep <- peak%/%Lntimes
+    if(Lstep==1){if(.verbose)warning("Lstep too short");return(NA)}#need at least 2 points to linear interpolate
+    #Left integration
+    k <- 1;
+    for(i in seq(1,peak,Lstep)){
+      if(k<Lntimes){
+        integral=integral+LinInt(LogVecPH[i:(i+Lstep)],delta[i:(i+Lstep)])
+      }else{
+        integral=integral+LinInt(LogVecPH[i:peak],delta[i:peak]);break
+      }
+      k=k+1;
+    }
+    
+    #Right integration
+    Rstep <- (length(delta)-peak)%/%Rntimes
+    
+    if(Rstep==1){if(.verbose)warning("to few points, decrease Rntimes");return(NA)}#need at least 2 points to linear interpolate    
+    k <- 1;
+    for(i in seq(peak,length(delta),Rstep)){
+      if(k<Rntimes){
+        integral=integral+LinInt(LogVecPH[i:(i+Rstep)],delta[i:(i+Rstep)]);
+      }else{
+        integral=integral+LinInt(LogVecPH[i:length(delta)],delta[i:length(delta)]);break
+      }
+      k=k+1;
+    }    
+    return(integral)    
+  }
+  
+  LagrangeIntegrate <- function(T,tau,z,c,lambda){
+    #Integrate using lagrange method the exponential
+    delta0 <- (z%*%c)/(c%*%c);
+    fdelta0 <- ((z-delta0*c)%*%(z-delta0*c))/T;
+    F2Der <- ((-2*c%*%c)/T)/fdelta0;
+    return(sqrt(pi/((1-T)*F2Der))*lambda**(T-tau)*exp((1-T)/2*log(fdelta0)-lambda*(T-tau)*delta0 )  )
+  }
+  
+  LogLagIntNoLamb <- function(T,tau,z,c){
+    # After having used a uniform over lambda and integrate over lambda using Laplace, 
+    # take the max of the log likelyhood
+    delta0 <- (z%*%c)/(c%*%c);
+    fdelta0 <- ((z-delta0*c)%*%(z-delta0*c))/T;
+    F2Der <- ((-2*c%*%c)/T)/fdelta0;
+    gamcoef <- lgamma(1+T-tau)#log(gamma(1+T-tau))
+    return(log(sqrt(pi/((1-T)*F2Der)))+((1-T)/2*log(fdelta0))+gamcoef-(T-tau+1)*log(delta0*(T-tau)))
+  }
+  
+  UnifLagInt <- function(T,tau,z,c){
+    #use a uniform over delta  and integrate over lambda using Laplace, 
+    # take the max of the log likelyhood 
+    delta0 <- (z%*%c)/(c%*%c);
+    fdelta0 <- ((z-delta0*c)%*%(z-delta0*c))/T;
+    F2Der <- ((-2*c%*%c)/T)/fdelta0;
+    return(log(sqrt(pi/((1-T)*F2Der)))+((1-T)/2*log(fdelta0)))
+  }
+
+  
+  z <- log(.ls)-mean(log(.ls)) # compute z-transformed var
+  T <- length(.ls);
+  taus <- 2:(T-3) # we know the tau cannot be the first point, neather one of the last three
+  cs <- lapply(taus, function(.t) C(T,.t))
+  maxLikLag <- sapply(seq_along(taus), function(.i) UnifLagInt(T,taus[.i],z,cs[[.i]]))
+  tauLag <- which.max(maxLikLag)
+  
+  if(.numerical_check) {
+    maxLikPH <- sapply(seq_along(taus), function(.i) PHIntegrate(T,taus[.i],z,cs[[.i]],2,6))
+    if (all(is.na(maxLikPH))) return(list())
+    tauPH <- which.max(maxLikPH)
+    if (abs(tauPH-tauLag) > 2) return(list())
+  }
+  
+  tau <- tauLag
+  delta0 <- as.numeric((z%*%cs[[tau]]) / (cs[[tau]]%*%cs[[tau]]))
+  x0 <- mean(log(.ls))-delta0*(T-tau)*(1+T-tau)/(2*T)
+  
+  if (.plot) {
+    plot(1:T,log(.ls), col=ifelse((1:T)>=tau, "red", "black"))
+    lines(1:T, append(x0*rep(1,tau),x0+seq(1,T-tau)*delta0 ))    
+    scan("")
+  }
+  
+  return(list(tau=tau, l_lag=exp(x0), rate_after=delta0))
+}
 
