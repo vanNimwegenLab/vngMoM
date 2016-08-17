@@ -4,76 +4,104 @@ author: Thomas Julou
 output: html_document
 ---
 
+Define general variables:
 
 ```{r variables, include=FALSE}
 dt <- 3             # frame intervall (min)
 dl <- 0.065         # pixel size (µm)
-vertical_cutoff <- 4 / dl   # after it touched this coordinate a cell is discarded
+vertical_cutoff <- 4 / dl   # after it touched this coordinate a cell is discarded 
+                    # (4um, NB E. coli is ca. 2um )
 
+# directory of the current project
+# data files are expected to be found inside `./data`
 proj_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/mother_machine/example/"
+# directory with shared scripts
 r_scripts_path <- c("~/Documents/Biozentrum/Projects/vngWetLabR/mother_machine",
                   "~/Documents/Biozentrum/Projects/vngWetLabR/ggplot")
 perl_scripts_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/mother_machine"
-data2preproc <- function(.d) sub('/data/*', '/preproc/', .d) # store cache file in preproc subdir
 
-condition_ts <- rbind(data.frame(duration=1440, medium='lactose', condition='lac_lowillum') #,
-                      # data.frame(duration=c(360, 240, 240, 240, 240, 240),
-                      #            medium=c('glucose', 'lactose', 'glucose', 'lactose', 'glucose', 'lactose'),
-                      #            condition='switch_4h')
-)
-
-date_cond <- c("20160318"="lac_lowillum")
-
-# # save environment (but `pls`)
-# myvars <- ls(all.names = TRUE)
-# save(list=myvars[which(myvars!='pls')], file=".RData", envir=.GlobalEnv)
+# preprocessed data files (produced by perl scripts) are named and saved by applying
+# `data2preproc` to their path (e.g. reproduce `data` inner structure inside `preproc`):
+data2preproc_dir <- function(.f) 
+  # replace ./data with ./preproc
+  dirname(.f) %>% sub('/data/*', '/preproc/', .)
+data2preproc_file <- function(.f)
+  # append _preproc.txt to the filename
+  basename(.f) %>% file_path_sans_ext %>% paste0("_preproc.txt")
+data2preproc <- function(.path)
+  file.path(data2preproc_dir(.path), data2preproc_file(.path))
 
 ```
 
+Setup the working environment:
 
 ```{r settings}
+# define global settings for knitr
 knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE) # , include=FALSE
 
-# set working environment
+# set working environment (load all shared R scripts)
 invisible(sapply(
   list.files(r_scripts_path, pattern="\\.[Rr]$", full.names=TRUE, ignore.case=TRUE), 
   source, .GlobalEnv))
 setwd(proj_path)
 
-library(parallel)
-numCores <- min(30, detectCores()-1) # do not use more than 30 cores
-
+# set a parallel environment to run multidplyr
 library(multidplyr)
+numCores <- min(30, parallel::detectCores()-1) # do not use more than 30 cores
 mycluster <- create_cluster(numCores)
-for (.l in mylibs) { mycluster %>% cluster_library(.l) }
+for (.l in mylibs) { mycluster %>% cluster_library(.l) } # load all libraries on each core
 
 ```
 
-
-Load all frames in a dataframe:\
-NB: this step calls a perl script to analyze MoMA's output. If all files have already been processed, data will be loaded in a dataframe; otherwise, files to be analyze will be submitted to the cluster's queue. To force the preprocessing to be run again for all files, use .force=TRUE in `process_moma_data`.
+Define the dataframes specifying experimental conditions (see ReadMe.md):
 
 ```{r}
-condition_ts <- condition_ts %>% group_by(condition) %>% 
+
+condition_ts <- rbind(data.frame(condition='lac_lowillum', duration=1440, medium='lactose') #,
+                    # data.frame(condition='switch_4h',
+                    #            duration=c(360, 240, 240, 240, 240, 240),
+                    #            medium=c('glucose', 'lactose', 'glucose', 'lactose', 'glucose', 'lactose'))
+)
+
+date_cond <- c("20160318"="lac_lowillum")
+
+# append useful variables to condition_ts
+condition_ts <- condition_ts %>% 
+  group_by(condition) %>% 
   mutate(t_start=cumsum(c(0, duration[-(length(duration))])) * 60,
          t_end=cumsum(duration) * 60 - 1e-5,
          m_cycle=value_occurence_index(medium))
 
+```
+
+
+Load all frames in a dataframe:
+
+- This step calls a perl script to analyze MoMA's output (see ReadMe.md). 
+  + If all files have already been processed, data will be loaded in a dataframe
+  + otherwise, files to be analyze will be submitted to the cluster's queue and an error will be returned; you can check the state of the queue using the function printed in the error message
+  + to force the preprocessing to be run again for all files, use .force=TRUE in `process_moma_data`.
+- If you use condition_ts appropriately, you should not need to call this loading step more than once per project.
+- The specific values used in the following (e.g. the duration of the preexperiment step should be adjusted between experiments).
+
+```{r}
+# raw data files must be found in `./data` and matched by the following pattern .*\\d+\\.csv (e.g. *20151023.csv)
 myfiles <- list.files("./data", ".*\\d+\\.csv", recursive=TRUE, full.names=TRUE)
 nc <- min(length(myfiles), length(mycluster)) # this is a dirty hack because multiplyr crashes with less shards than cores
 
 # load perl scripts output to dataframes (using parallel lapply)
 myframes <- myfiles %>% 
-  # process exported files on the cluster if required
+  # process exported files on the cluster if required (otherwise return the list of paths)
   process_moma_data(.data2preproc=data2preproc, .scripts_path=perl_scripts_path, 
                     .qsub_name="MMex_pl", .force=FALSE) %>% 
+  # convert to a dataframe with a unique column
   dplyr::data_frame(path=.) %>% 
   mutate(ppath=data2preproc(path)) %>% 
-  # load perl scripts output to dataframes (using multidplyr)
-  # group_by(path) %>%
+  # load perl scripts output to dataframes (in parallel, using multidplyr)
   partition(path, cluster=mycluster[1:nc] %>%
               cluster_assign_func(load_moma_processed, parse_frames_stats, compute_genealogy, which_touch_exit, which_to_progeny) %>%
               cluster_assign_obj(dt, dl, vertical_cutoff)) %>%
+  # group_by(path) %>% # non-parallel alternative
   do((function(.df){
     load_moma_processed(.df$ppath) %>% 
       mutate(time_sec=frame*dt*60, length_um=length_pixel*dl,
@@ -82,16 +110,17 @@ myframes <- myfiles %>%
       group_by(id) %>%
       mutate(discard_top=which_touch_exit(vertical_top, vertical_cutoff)) %>%
       mutate(discard_top=ifelse(discard_start, FALSE, discard_top)) %>% # not in the preexpt step (2h)
-      mutate(end_type=ifelse(any(discard_top), 'exit', end_type)) %>% # update end_type
+      mutate(end_type=ifelse(any(discard_top), 'exit', end_type)) %>% # update end_type to exit for cells which have touched the vertical cutoff
       # remove daughters of cells that touched the exit
       ungroup %>%
       mutate(discard_top=which_to_progeny(discard_top, cid))
   })(.)) %>%
-  collect()
+  collect() %>% 
+  # append useful variables (per cell)
   group_by(date, pos, gl, id) %>%
   mutate(start_time=first(time_sec), end_time=last(time_sec),
          b_rank=round(mean(total_cell_in_lane - cell_num_in_lane))) %>% 
-  #   filter(discard_top==FALSE) %>%
+  # append useful variables (per row)
   ungroup %>% 
   mutate(condition=date_cond[as.character(date)],
          vertical_center=(vertical_bottom + vertical_top)/2,
@@ -104,8 +133,18 @@ myframes <- myfiles %>%
     mutate(.df, medium=.ts$medium[.idx], m_start=.ts$t_start[.idx], m_cycle=.ts$m_cycle[.idx])
   })(.))  
 
-autofluo_per_um <- 422.8 / 8
-fp_per_dn <- 1
+```
+
+
+In order to estimate the fluorescence produced by GFP and to convert it to number of molecules, one needs:
+- to subtract the autofluorescence (inferred as a linar function of cell length); the appropriate linear coefficient (for a given strain and illumination condition) must be estimate using a non fluorescent strain.
+- to apply the GFP conversion factor; for a given fluorescent protein and illumination conditiopn, this factor must be estimated from data where the cells grow and divide after having stopped GFP production, hence "diluting" their total GFP. 
+
+Here we use dummy estimates for these conversions:
+
+```{r}
+autofluo_per_um <- 422.8 # for MG1655 with 2sec illumination at 17% intensity with ND4 filter
+fp_per_dn <- 1 # dummy placeholder
 
 autofluo_predict <- function(.h) .h * autofluo_per_um
 myframes <- myframes %>%
@@ -115,7 +154,7 @@ myframes <- myframes %>%
 ```
 
 
-Compute statistics per cell:
+It is useful to compute statistics per cell, over the entire cell cycle, e.g. the cell elongation rate:
 
 ```{r}
 mycells <- filter(myframes, condition!='switch', !discard_top) %>%
@@ -161,9 +200,8 @@ print(mycells)
 ```
 
 
-Plot cell traces for length and fluo.
-
-Minimal example for one growth lane:
+In order to visually inspect data, one can plot cell traces for length and fluo. 
+For a given growth lane, a minimal example looks like:
 
 ```{r}
 myframes %>% 
@@ -179,7 +217,7 @@ myframes %>%
 
 ```
 
-for all growth lanes, several variables, saved as multipage pdf:
+The following code shows all traces of the dataset for several variables, one plot per growth lane and per variable, and save these plots as multipage pdfs:
 
 ```{r eval=FALSE}
 pls <- myframes %>% 
@@ -202,6 +240,7 @@ pls <- myframes %>%
     }
     
     list(
+      # plot of length traces (in log scale)
       l = filter(.df, !discard_top, vertical_top>vertical_cutoff) %>% 
         mutate(time_sec=time_sec-2*3600) %>% 
         plot_faceted_var_tracks(.var_col='length_um', .show_all=TRUE, .show_cellid=TRUE, .log=TRUE, .facet_labeller=custom_labels) +
@@ -217,6 +256,7 @@ pls <- myframes %>%
         scale_y_continuous(breaks=2:4, trans='log2') +
         labs(y='length (µm)'), 
       
+      # plot of total fluo traces
       ft = filter(.df, !discard_top, vertical_top>vertical_cutoff) %>% 
         mutate(time_sec=time_sec-2*3600) %>% 
         plot_faceted_var_tracks(.var_col='gfp_nb', .show_all=TRUE, .show_cellid=TRUE, .facet_labeller=custom_labels) +
@@ -229,9 +269,9 @@ pls <- myframes %>%
         # mask early frames (requires a dummy df!)
         geom_rect(aes(xmin=-Inf, xmax=0, ymin=-Inf, ymax=Inf, group=1), fill='white', alpha=.6, col='transparent', data=data.frame(a=1)) +
         scale_x_hours(4) +
-        # scale_y_continuous(breaks=2:4, trans='log2') +
         labs(y='total GFP per cell (molecules)'),
       
+      # plot of fluo concentration traces
       fc = filter(.df, !discard_top, vertical_top>vertical_cutoff) %>% 
         mutate(time_sec=time_sec-2*3600, gfp_conc=gfp_nb/length_um) %>% 
         plot_faceted_var_tracks(.var_col='gfp_conc', .show_all=TRUE, .show_cellid=TRUE, .facet_labeller=custom_labels) +
@@ -244,7 +284,6 @@ pls <- myframes %>%
         # mask early frames (requires a dummy df!)
         geom_rect(aes(xmin=-Inf, xmax=0, ymin=-Inf, ymax=Inf, group=1), fill='white', alpha=.6, col='transparent', data=data.frame(a=1)) +
         scale_x_hours(4) +
-        # scale_y_continuous(breaks=2:4, trans='log2') +
         labs(y='total GFP per cell (molecules)') 
     )
   })(.))
@@ -274,4 +313,14 @@ for (i in 1:dim(pls)[1]) {
 dev.off()
 
 ```
+
+
+A trick to save the current environment without the huge `pls` variable:
+
+```{r eval=FALSE}
+myvars <- ls(all.names = TRUE)
+save(list=myvars[which(myvars!='pls')], file=".RData", envir=.GlobalEnv)
+
+```
+
 

@@ -108,9 +108,10 @@ mycut <- function(.x, ...) {
 
 # MoMA loading ####
 if (!exists("data2preproc_dir", mode="function"))
-  data2preproc_dir <- identity
+  data2preproc_dir <- function(.f) dirname(.f)
 if (!exists("data2preproc_file", mode="function"))
-  data2preproc_file <- identity
+  data2preproc_file <- function(.f)
+    basename(.f) %>% file_path_sans_ext %>% paste0("_preproc.txt")
 if (!exists("data2preproc", mode="function"))
   data2preproc <- function(.path)
     file.path(data2preproc_dir(.path), data2preproc_file(.path))
