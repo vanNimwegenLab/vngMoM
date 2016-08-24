@@ -80,20 +80,23 @@ Load all frames in a dataframe:
 - The specific values used in the following (e.g. the duration of the preexperiment step should be adjusted between experiments).
 
 ```{r}
-# create a list of raw data files from myconditions
+# find raw data files from myconditions and store them in a dataframe
 myfiles <- myconditions %>% 
+  # convert the relevant list items to a dataframe
   lapply(function(.l) .l[ - which(names(.l) %in% c("duration", "medium"))] %>% as.data.frame(stringsAsFactors=FALSE) ) %>% 
   do.call(rbind, .) %>% 
   rename(data_path=paths) %>%
+  # for each path, find all files matched by the pattern .*\\d+\\.csv (e.g. *20151023.csv)
   group_by(condition, data_path) %>% 
   do((function(.df)
-    # raw data files must be found in `./data` and matched by the following pattern .*\\d+\\.csv (e.g. *20151023.csv)
     list.files(.df$data_path, ".*\\d+\\.csv", recursive=TRUE, full.names=TRUE) %>% data.frame(path=., stringsAsFactors=FALSE) )(.))  
 
 # create condition_ts (describing each temporal change of each condition) from myconditions 
 condition_ts <- myconditions %>% 
+  # convert the relevant list items to a dataframe
   lapply(function(.l) .l[ - which(names(.l) == "paths")] %>% as.data.frame ) %>% 
   do.call(rbind, .) %>% 
+  # add useful variables for each condition step
   group_by(condition) %>% 
   mutate(t_start=cumsum(c(0, duration[-(length(duration))])) * 60,
          t_end=cumsum(duration) * 60 - 1e-5,
