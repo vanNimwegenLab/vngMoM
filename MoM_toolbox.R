@@ -121,9 +121,10 @@ process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE,
                               .qsub_name="MM_pl" # must be shorter than 10 characters
 ) { # browser()
   # check whether some files need to be preprocessed
-  .preprocessed <- .data2preproc(.x) %>% file.exists
+  .out <- .data2preproc(.x)
+  .preprocessed <- file.exists(.out)
   if (all(.preprocessed) && !.force) {
-    return(.x) 
+    return(.out) 
   } else {
     # call qsub
     lapply(.x[ which(.force | !.preprocessed) ],
@@ -152,21 +153,8 @@ process_state <- function(.qsub_name="MM_pl") {
   }
 }
 
-load_moma_processed <- function(.path, .verbose=FALSE) {
-  # if (.path =='./preproc/20150616/20150616_pos2_preproc_ready_GL07_frames.txt') browser()
-  # print(.path)
-  if (!file.exists(.path)) stop("input path is not valid.")
-  .frames_out <- parse_frames_stats(.path) %>%
-    rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
-    mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
-  .m <- str_match(basename(.path), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*")
-  
-  data.frame(date=as.numeric(.m[1, 2]), pos=as.numeric(.m[1, 3]), gl=as.numeric(.m[1, 4]), 
-             .frames_out)
-}
-
-
 parse_frames_stats <- function(.path) {
+  if (!file.exists(.path)) stop("input path is not valid.")
   flines <- readLines(.path)
   # browser()
 
@@ -185,27 +173,28 @@ parse_frames_stats <- function(.path) {
   
   # parse all cells
   id_lines <- grep("^>CELL", flines)
-  .out <- do.call(rbind, 
-                  lapply(seq_along(id_lines)[-1], function(.i) {
-                    # browser()
-#                     .df <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
-#                       flines[.] %>% paste(collapse='\n') %>%           # concat lines
-#                       textConnection %>% read.table(comment.char="", header=FALSE) %>% # read table
-#                       setNames(.colnames)
-                    .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
-                      flines[.] %>% paste(collapse='\n') # concat lines
-                    .con <- textConnection(.str)
-                    .df <- read.table(.con, comment.char="", header=FALSE) %>% setNames(.colnames)
-                    close(.con) # close text connection
-                    .info <- flines[id_lines[.i-1]] %>% # extract line
-                      strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
-                      .[-1] %>% t %>% data.frame(stringsAsFactors=FALSE) %>%    # convert to df
-                      setNames(.fieldnames[-1]) %>%
-                      mutate(cell_ID=as.numeric(cell_ID), parent_ID=as.numeric(parent_ID), 
-                             first_frame=as.numeric(first_frame), last_frame=as.numeric(last_frame))
-                    cbind(.info, .df)
-                  }) )
-  return(.out)
+  lapply(seq_along(id_lines)[-1], function(.i) {
+    # browser()
+    #                     .df <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
+    #                       flines[.] %>% paste(collapse='\n') %>%           # concat lines
+    #                       textConnection %>% read.table(comment.char="", header=FALSE) %>% # read table
+    #                       setNames(.colnames)
+    .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
+      flines[.] %>% paste(collapse='\n') # concat lines
+    .con <- textConnection(.str)
+    .df <- read.table(.con, comment.char="", header=FALSE) %>% setNames(.colnames)
+    close(.con) # close text connection
+    .info <- flines[id_lines[.i-1]] %>% # extract line
+      strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
+      .[-1] %>% t %>% data.frame(stringsAsFactors=FALSE) %>%    # convert to df
+      setNames(.fieldnames[-1]) %>%
+      mutate(cell_ID=as.numeric(cell_ID), parent_ID=as.numeric(parent_ID), 
+             first_frame=as.numeric(first_frame), last_frame=as.numeric(last_frame))
+    cbind(.info, .df)
+  }) %>% 
+    do.call(rbind, .) %>% 
+    rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
+    mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
 }
 
 

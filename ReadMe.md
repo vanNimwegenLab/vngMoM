@@ -30,16 +30,14 @@ the resulting "preprocessed" data files are written to the directory of your cho
                                      ...
 ```
 
-> NB: The directory structure of the raw data directory can be replicated in the preproc directory.
-
-> NB: the function `data2preproc` must be defined: it converts raw data path to preproc path. If you want cache files to be stored along with raw data, simply use `identity`. For the sake of flexibility and readability, `data2preproc` is split into two subfunctions `data2preproc_dir` and `data2preproc_file` which handle the name conversion of the directory and file respectively.
+> NB: The directory structure of the raw data directory can be replicated in the preproc directory. This is controlled by the function `data2preproc`: it converts raw data path to preproc path. If you want cache files to be stored along with raw data, simply use `identity`. For the sake of flexibility and readability, `data2preproc` is split into two subfunctions `data2preproc_dir` and `data2preproc_file` which handle the name conversion of the directory and file respectively.
 
 `process_moma_data()` handles this preprocessing step (using the computing power of the BC2 cluster) and returns a vector containing the paths to all preprocessed files. For any raw data file whose corresponding preprocessed file is not found, the preprocessing is started using the BC2 queue and the function will return an error message; the user must run this function once more after all jobs are executed.
 Alternatively, if all preprocessed files are found, the function returns a vector containing the paths to all preprocessed files. This approach uses the preprocessed files as cache when an analysis is rerun later by the user; the analysis can be rerun from scratch by setting `force=TRUE`.
 
-`load_moma_processed()` parses one preprocessed file to an R dataframe. It is used over the output of `process_moma_data()` to load them all and concatenate the dataframes. The result is a large dataframe `myframes` gathering all data considered in the analysis (with one row per cell per frame and one column per variable).
+`parse_frames_stats()` parses one preprocessed file to an R dataframe. It is used over the output of `process_moma_data()` to load them all and concatenate the dataframes. The result is a large dataframe `myframes` gathering all data considered in the analysis (with one row per cell per frame and one column per variable).
 
-`myframes` is designed to be enriched with new ciolumn during the analysis; in particular dummy variables are helpful to distinguish the setup of the data that matches a given driteria. `myframes` has the following variables (and more!) by default
+`myframes` is designed to be enriched with new columns during the analysis; in particular dummy variables are helpful to distinguish the setup of the data that matches a given driteria. `myframes` has the following variables (and more!) by default
 
 - `id`, `gl`: the ID and growth lane of the given cell.
 - `path`: the path of the CSV file containing the information of the given cell.
@@ -54,7 +52,7 @@ Alternatively, if all preprocessed files are found, the function returns a vecto
 
 ## Appending experimental conditions
 
-By default, the naming of MoMA files don't encode details of the conditions used in each experiment. For this purpose, we define a dataframe (`condition_ts`) that describes the details of a given condition (that might have been used over several replicate experiments), and a named vector (`date_cond`) that maps each experiment to a given condition; the values of `date_cond` must be found in `condition_ts` and each entry must be named with the date of an experiment.
+By default, the naming of MoMA files don't encode details of the conditions used in each experiment. For this purpose, we define a dataframe (`myconditions`) that describes the details of a given condition (that might have been used over several replicate experiments) and where corresponding data are located (so as to map each experiment to a given condition).
 
 This information is appended to `myframes` and parsed to identify the following variables for each row: in which medium the cells currently are (`medium`), how long has elapsed since the last medium switch (`m_start`), and how many time they have seen this medium already (`m_cycle`).
 
