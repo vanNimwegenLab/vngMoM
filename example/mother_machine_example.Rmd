@@ -83,7 +83,8 @@ Load all frames in a dataframe:
 # find raw data files from myconditions and store them in a dataframe
 myfiles <- myconditions %>% 
   # convert the relevant list items to a dataframe
-  lapply(function(.l) .l[ - which(names(.l) %in% c("duration", "medium"))] %>% as.data.frame(stringsAsFactors=FALSE) ) %>% 
+  lapply(function(.l) .l[ - which(names(.l) %in% c("duration", "medium"))] %>% 
+           as.data.frame(stringsAsFactors=FALSE) ) %>% 
   do.call(rbind, .) %>% 
   rename(data_path=paths) %>%
   # for each path, find all files matched by the pattern .*\\d+\\.csv (e.g. *20151023.csv)
@@ -130,7 +131,8 @@ myframes <- myfiles %>%
   collect() %>% 
   # append useful variables (per row)
   ungroup %>% 
-  extract(path, c("date", "pos", "gl"), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*", remove=FALSE) %>%
+  extract(path, c("date", "pos", "gl"), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*", remove=FALSE, convert=TRUE) %>%
+  mutate_at(vars(date, pos, gl), factor) %>% 
   mutate(cell=paste(date, pos, gl, id, sep='.'),
          vertical_center=(vertical_bottom + vertical_top)/2) %>% 
   # propagate medium info

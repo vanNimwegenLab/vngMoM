@@ -1,5 +1,6 @@
 mylibs <- c("stats", # required to prevent hiding dplyr::filter later on
-            "tools", "stringi", "stringr", "tidyr", "dplyr", # "readr",
+            "dplyr", # load before tidyr to force using the user version
+            "tools", "stringi", "stringr", "tidyr", # "readr",
             "ggplot2", "scales", "gridExtra",
             "RcppArmadillo", "ccaPP")
 invisible( suppressPackageStartupMessages( # don't use %>% before loading dplyr
