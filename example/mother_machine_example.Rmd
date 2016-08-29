@@ -132,7 +132,7 @@ myframes <- myfiles %>%
   # append useful variables (per row)
   ungroup %>% 
   extract(path, c("date", "pos", "gl"), ".*(\\d{8})_.*pos(\\d+).*_GL(\\d+).*", remove=FALSE, convert=TRUE) %>%
-  mutate_at(vars(date, pos, gl), factor) %>% 
+  # mutate_at(vars(date, pos, gl), factor) %>% # convert to factors (ad libidum)
   mutate(cell=paste(date, pos, gl, id, sep='.'),
          vertical_center=(vertical_bottom + vertical_top)/2) %>% 
   # propagate medium info
