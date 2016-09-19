@@ -5,6 +5,7 @@ mylibs <- c("stats", # required to prevent hiding dplyr::filter later on
             "RcppArmadillo", "ccaPP")
 invisible( suppressPackageStartupMessages( # don't use %>% before loading dplyr
   lapply(mylibs, library, character.only=TRUE) ))
+options("readr.num_columns" = 0) # disable printing when loading data with readr
 
 # ggplot2 housekeeping ####
 theme_set(theme_bw())
@@ -64,6 +65,16 @@ cluster_assign_func <- function(.cl, ...) {
 }
 
 # general convenience functions ####
+find.files <- function(.path, .name="", .pattern="", .mindepth=NULL, .maxdepth=NULL) {
+# find.files is a minimalist wrapper around bash's `find` to be used as a faster alternative to list.files
+  .fargs <- .path
+  if (.name!="") .fargs <- c(.fargs, paste("-name", .name))
+  if (.pattern!="") .fargs <- c(.fargs, "-regextype posix-basic", paste("-regex", .pattern))
+  if (!is.null(.mindepth)) .fargs <- c(.fargs, paste("-mindepth", .mindepth))
+  if (!is.null(.maxdepth)) .fargs <- c(.fargs, paste("-maxdepth", .maxdepth))
+  system2("find", .fargs, stdout=TRUE)
+}
+
 between_or <- function(.x, .a, .b) {
   if (length(.a) != length(.b)) error('.a and .b must have the same length.')
   lapply(seq(length(.a)), function(.i) between(.x, .a[.i], .b[.i])) %>%
@@ -72,7 +83,7 @@ between_or <- function(.x, .a, .b) {
 }
 
 value_occurence_index <- function(.m) {
-  # value_occurence_index returns the index of each occurence of a vector level
+# value_occurence_index returns the index of each occurence of a vector level
   .m <- factor(.m)
   .out <- NA
   for (.l in levels(.m)) {
@@ -105,6 +116,11 @@ mycut <- function(.x, ...) {
                    mean(c(as.numeric(.m[2]), as.numeric(.m[3])))
                  })
   .mids[.k]
+}
+
+gm_mean = function(x, na.rm=TRUE) {
+# computes geometric mean (from http://stackoverflow.com/a/25555105/576684)
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
 
 # MoMA loading ####
@@ -222,6 +238,13 @@ which_to_progeny <- function(.x, .cid) {
   return(.out)  
 }
 
+fit_exp_elongation <- function(.t, .l) {
+  if (length(.t) != length(.l)) stop('variables of different lengths.')
+  if (length(.t) <= 4) return(NA)
+  
+  lm(log(.l)~.t) %>% # use lm() for predict with se
+    predict(se.fit=TRUE) %>% .[['fit']] %>% exp
+}
 
 parse_timm_curation <- function(.path) {
   .flines <- readLines(.path)

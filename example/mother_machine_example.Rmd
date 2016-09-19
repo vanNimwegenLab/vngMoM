@@ -90,7 +90,9 @@ myfiles <- myconditions %>%
   # for each path, find all files matched by the pattern .*\\d+\\.csv (e.g. *20151023.csv)
   group_by(condition, data_path) %>% 
   do((function(.df)
-    list.files(.df$data_path, ".*\\d+\\.csv", recursive=TRUE, full.names=TRUE) %>% data.frame(path=., stringsAsFactors=FALSE) )(.))  
+    # list.files(.df$data_path, ".*\\d+\\.csv", recursive=TRUE, full.names=TRUE) %>% 
+    find.files(.df$data_path, "ExportedCellStats_*.csv") %>% # faster alternative to list.files (for unix-based OS)
+      data.frame(path=., stringsAsFactors=FALSE) )(.))  
 
 # create condition_ts (describing each temporal change of each condition) from myconditions 
 condition_ts <- myconditions %>% 
@@ -103,8 +105,8 @@ condition_ts <- myconditions %>%
          t_end=cumsum(duration) * 60 - 1e-5,
          m_cycle=value_occurence_index(medium))
 
-# load perl scripts output to dataframes (using parallel lapply)
-nc <- min(length(myfiles), length(mycluster)) # this is a dirty hack because multidplyr crashes with less shards than cores
+# load perl scripts output to dataframes (using parallel dplyr)
+nc <- min(nrow(myfiles), length(mycluster)) # this is a dirty hack because multidplyr crashes with less shards than cores
 myframes <- myfiles %>% 
   # process exported files on the cluster if required (otherwise return the list of paths)
   ungroup %>% 
@@ -114,7 +116,7 @@ myframes <- myfiles %>%
   partition(condition, path, cluster=mycluster[1:nc] %>%
               cluster_assign_func(parse_frames_stats, compute_genealogy, which_touch_exit, which_to_progeny) %>%
               cluster_assign_obj(dt, dl, vertical_cutoff)) %>%
-  # group_by(path) %>% # non-parallel alternative
+  # group_by(condition, path) %>% # non-parallel alternative
   do((function(.df){
     parse_frames_stats(.df$ppath) %>% 
       mutate(time_sec=frame*dt*60, length_um=length_pixel*dl,
@@ -140,9 +142,10 @@ myframes <- myfiles %>%
   do((function(.df){
     .ts <- filter(condition_ts, condition==unique(.df$condition))
     .idx <- find_unique_interval(.df$time_sec, .ts$t_start, .ts$t_end)
-    mutate(.df, medium=.ts$medium[.idx], m_start=.ts$t_start[.idx], m_cycle=.ts$m_cycle[.idx])
+    mutate(.df, medium=.ts$medium[.idx], m_start=.ts$t_start[.idx], m_end=.ts$t_end[.idx], m_cycle=.ts$m_cycle[.idx])
   })(.)) %>% 
-  # append useful variables (per cell)
+  # sort and append useful variables (per cell)
+  arrange(date, pos, gl, id, frame) %>%  # sort data after `partition()`
   group_by(date, pos, gl, id) %>%
   mutate(start_time=first(time_sec), end_time=last(time_sec),
          b_rank=round(mean(total_cell_in_lane - cell_num_in_lane)))

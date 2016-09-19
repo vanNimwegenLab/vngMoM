@@ -20,7 +20,7 @@ if($numargs != 1){
 $infile = shift(@ARGV);
 
 #Get name of growth lane from the file
-if($infile =~ /pos(\d+)/){
+if($infile =~ /[Pp]os(\d+)/){
     $pos = $1;
 }
 else{
