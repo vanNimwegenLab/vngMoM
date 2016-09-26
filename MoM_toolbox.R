@@ -314,7 +314,7 @@ get_all_parents_cid <- function(.cid) {
 }
 
 get_daughters_cid <- function(.cid) {
-  paste0(.cid, c('B', 'T'))
+  c(paste0(.cid, 'B'), paste0(.cid, 'T'))
 }
 
 genealogy_ontology <- function(.div_min, .div_max) {
@@ -512,137 +512,53 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
 }
 
 
-
-compute_growth_lag <- function(.ls, .numerical_check=FALSE, .plot=FALSE) {
-  PH <- function(delta,T,tau,z,c){
-    return((mean((z-delta*c)**2))**((1-T)/2))
-  }
+# lag inference (from Athos) ####
+compute_lag <- function(.xs, .skip_start=0, .skip_end=1, .scaling_factor=1e-2, .plot=FALSE) {
+  # browser()
+  if (length(.xs) < 3+.skip_start+.skip_end ) return(list())
+  if (.skip_end<1) .skip_end <- 1
   
-  C <- function(T,tau){
-    C <- c()
-    for(i in 1:T){
-      if(i>tau){
-        C=append(C,i-tau-(T-tau)*(1+T-tau)/(2*T) )
-      }else{
-        C=append(C,-(T-tau)*(1+T-tau)/(2*T) )
-      }
-    }
-    return(C)
-  }
-  
-  ##Integration
-  LinInt <- function(LogVecPH,delta){
-    #Trapezioidal rule on log data and then exponentiate them    
-    vecPH.lm = lm(LogVecPH~delta)#linear model
-    coeff=coefficients(vecPH.lm)
-    return((exp(coeff[1]+coeff[2]*max(delta))-exp(coeff[1]+coeff[2]*min(delta)))/coeff[2] )
-  }
-  
-  PHIntegrate <- function(T,tau,z,c,Lntimes,Rntimes, .verbose=FALSE){
-    # Take exp(log(x)) linearize log(x) and integrate it between min and may. 
-    # Then since in log space = ax+b the result of the integral reads exp(ax+b)/a    
-    delta <- seq(0,0.5,0.001)
-    fun <- sapply(delta,PH,tau=tau,c=c,z=z,T=T)    
-    LogVecPH <- sapply(fun,log)
-    peak <- which(LogVecPH==max(LogVecPH))#Find the peack, NB length of delta and LogVecPH is the same
-    #find a better interval than the delta interval guessed.
-    Rstep <- (length(delta)-peak)%/%Rntimes;
-    if(abs(LinInt(LogVecPH[(length(delta)-Rstep):length(delta)],delta[(length(delta)-Rstep):length(delta)]))>10**(-2)) { 
-      if(.verbose) warning("error in integration, delta to short");
-      return(NA) #Error if integral relevant for delta>0.3
-    }
-    
-    j <- 0;
-    for(i in seq(peak,length(delta),Rstep)){
-      j=j+1;
-      if(abs(LinInt(LogVecPH[i:(i+Rstep)],delta[i:(i+Rstep)]))>10**(-2)&&j==Rntimes){if(.verbose)warning("The delta is to short!");return(NA)}
-      if(abs(LinInt(LogVecPH[i:(i+Rstep)],delta[i:(i+Rstep)]))>10**(-2)){next;#as the integrals smaller than 10**(-2) neglect, re save delta and logvecph in the interesting region
-      }else{delta <- delta[1:i];LogVecPH <- LogVecPH[1:i]; break}
-    }
-    
-    #integrate
-    integral <- 0;
-    Lstep <- peak%/%Lntimes
-    if(Lstep==1){if(.verbose)warning("Lstep too short");return(NA)}#need at least 2 points to linear interpolate
-    #Left integration
-    k <- 1;
-    for(i in seq(1,peak,Lstep)){
-      if(k<Lntimes){
-        integral=integral+LinInt(LogVecPH[i:(i+Lstep)],delta[i:(i+Lstep)])
-      }else{
-        integral=integral+LinInt(LogVecPH[i:peak],delta[i:peak]);break
-      }
-      k=k+1;
-    }
-    
-    #Right integration
-    Rstep <- (length(delta)-peak)%/%Rntimes
-    
-    if(Rstep==1){if(.verbose)warning("to few points, decrease Rntimes");return(NA)}#need at least 2 points to linear interpolate    
-    k <- 1;
-    for(i in seq(peak,length(delta),Rstep)){
-      if(k<Rntimes){
-        integral=integral+LinInt(LogVecPH[i:(i+Rstep)],delta[i:(i+Rstep)]);
-      }else{
-        integral=integral+LinInt(LogVecPH[i:length(delta)],delta[i:length(delta)]);break
-      }
-      k=k+1;
-    }    
-    return(integral)    
-  }
-  
-  LagrangeIntegrate <- function(T,tau,z,c,lambda){
-    #Integrate using lagrange method the exponential
-    delta0 <- (z%*%c)/(c%*%c);
-    fdelta0 <- ((z-delta0*c)%*%(z-delta0*c))/T;
-    F2Der <- ((-2*c%*%c)/T)/fdelta0;
-    return(sqrt(pi/((1-T)*F2Der))*lambda**(T-tau)*exp((1-T)/2*log(fdelta0)-lambda*(T-tau)*delta0 )  )
-  }
-  
-  LogLagIntNoLamb <- function(T,tau,z,c){
-    # After having used a uniform over lambda and integrate over lambda using Laplace, 
-    # take the max of the log likelyhood
-    delta0 <- (z%*%c)/(c%*%c);
-    fdelta0 <- ((z-delta0*c)%*%(z-delta0*c))/T;
-    F2Der <- ((-2*c%*%c)/T)/fdelta0;
-    gamcoef <- lgamma(1+T-tau)#log(gamma(1+T-tau))
-    return(log(sqrt(pi/((1-T)*F2Der)))+((1-T)/2*log(fdelta0))+gamcoef-(T-tau+1)*log(delta0*(T-tau)))
-  }
-  
-  UnifLagInt <- function(T,tau,z,c){
-    #use a uniform over delta  and integrate over lambda using Laplace, 
+  UnifLagInt <- function(.T, .tau, .z, .delta){
+    # use a uniform over delta  and integrate over lambda using Laplace, 
     # take the max of the log likelyhood 
-    delta0 <- (z%*%c)/(c%*%c);
-    fdelta0 <- ((z-delta0*c)%*%(z-delta0*c))/T;
-    F2Der <- ((-2*c%*%c)/T)/fdelta0;
-    return(log(sqrt(pi/((1-T)*F2Der)))+((1-T)/2*log(fdelta0)))
+    delta0 <- (.z%*%.delta) / (.delta%*%.delta);
+    fdelta0 <- ((.z-delta0*.delta) %*% (.z-delta0*.delta)) / .T;
+    F2Der <- ((-2*.delta%*%.delta)/.T) / fdelta0;
+    # return(log(sqrt(pi/((1-T)*F2Der))) + ((1-T)/2*log(fdelta0)))
+    return(-log((1-.T)*F2Der)+((1-.T)/2*log(fdelta0)) )
   }
 
+  .xsc <- .xs # scaled variable
+  .T <- length(.xs);
+  .taus <- (1+.skip_start):(.T-.skip_end) # remove very unlikely taus (for speedup)
+  # .maxLikLag <- NA
+  # while(any(is.na(.maxLikLag))) {
+    .xsc <- .xsc * .scaling_factor
+    .zs <- .xs-mean(.xsc) # compute z-transformed var
+    .DELTA_vecs <- lapply(.taus, function(.tau) 
+      ifelse((1:.T)<.tau, -(.T-.tau)*(1+.T-.tau)/(2*.T), (1:.T) -.tau-(.T-.tau)*(1+.T-.tau)/(2*.T)) )
+    .maxLikLag <- sapply(seq_along(.taus), function(.i) UnifLagInt(.T, .taus[.i], .zs, .DELTA_vecs[[.i]]))
+  # }
   
-  z <- log(.ls)-mean(log(.ls)) # compute z-transformed var
-  T <- length(.ls);
-  taus <- 2:(T-3) # we know the tau cannot be the first point, neather one of the last three
-  cs <- lapply(taus, function(.t) C(T,.t))
-  maxLikLag <- sapply(seq_along(taus), function(.i) UnifLagInt(T,taus[.i],z,cs[[.i]]))
-  tauLag <- which.max(maxLikLag)
-  
-  if(.numerical_check) {
-    maxLikPH <- sapply(seq_along(taus), function(.i) PHIntegrate(T,taus[.i],z,cs[[.i]],2,6))
-    if (all(is.na(maxLikPH))) return(list())
-    tauPH <- which.max(maxLikPH)
-    if (abs(tauPH-tauLag) > 2) return(list())
-  }
-  
-  tau <- tauLag
-  delta0 <- as.numeric((z%*%cs[[tau]]) / (cs[[tau]]%*%cs[[tau]]))
-  x0 <- mean(log(.ls))-delta0*(T-tau)*(1+T-tau)/(2*T)
+  # TO DO hunt for NA
+  if (any(is.na(.maxLikLag))) {
+    warning('some values of maxLikLag are NaN: you might want to increase the scaling factor')
+    return(list())
+    }
+  .tau <- which.max(.maxLikLag) + .skip_start
+  # case where the lag is longer than the data
+  if (.tau > length(.maxLikLag)-.skip_end) return(list(tau=Inf, x_lag=mean(.xs), slope_after=NA))
+  .delta0 <- (.zs %*% .DELTA_vecs[[.tau-.skip_start]]) / (.DELTA_vecs[[.tau-.skip_start]] %*% .DELTA_vecs[[.tau-.skip_start]])
+  .x0 <- mean(.xs) - .delta0 * (.T-.tau) * (1+.T-.tau)/(2*.T)
   
   if (.plot) {
-    plot(1:T,log(.ls), col=ifelse((1:T)>=tau, "red", "black"))
-    lines(1:T, append(x0*rep(1,tau),x0+seq(1,T-tau)*delta0 ))    
-    scan("")
+    # plot(1:.T,.xs, col=ifelse((1:.T)>=.tau, "red", "black"))
+    # lines(1:.T, c(.x0*rep(1,.tau), .x0+seq(1,.T-.tau)*.delta0)) 
+    .pl <- qplot(1:.T,.xs, col=(1:.T)>=.tau) +
+      geom_line(aes(y=c(.x0*rep(1,.tau), .x0+seq(1,.T-.tau)*.delta0), col=NULL)) 
+      print(.pl)
   }
   
-  return(list(tau=tau, l_lag=exp(x0), rate_after=delta0))
+  return(list(tau=.tau, x_lag=.x0, slope_after=.delta0))
 }
 
