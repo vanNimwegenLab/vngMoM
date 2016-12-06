@@ -14,10 +14,10 @@ scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.v
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 brewer_cols <- c(RColorBrewer::brewer.pal(4, 'Set1'), 'gray42')
 brewer_all_cols <- RColorBrewer::brewer.pal(9, 'Set1')
-scale_colour_periodic_brewer <-
-  function(...) scale_colour_manual(..., values = rep(brewer_cols, 1000), na.value='gray25')
-scale_fill_periodic_brewer <- function(...) 
-  scale_fill_manual(..., values = rep(brewer_cols, 1000), na.value='gray25')
+scale_colour_periodic_brewer <- function(..., .n=4) 
+  scale_colour_manual(..., values = rep(c(brewer_all_cols[1:.n], 'gray42'), 1000), na.value='gray25')
+scale_fill_periodic_brewer <- function(..., .n=4) 
+  scale_fill_manual(..., values = rep(c(brewer_all_cols[1:.n], 'gray42'), 1000), na.value='gray25')
 scale_shape_periodic <- function(...) 
   scale_shape_manual(..., values = rep(15:18, 5))
 
@@ -155,6 +155,12 @@ process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE,
          call.=FALSE)
   }
 }
+
+qstat <- function(.args="")
+  paste("source /etc/profile.d/sge.sh; qstat", .args) %>% system
+
+qacct <- function(.args="")
+  paste("source /etc/profile.d/sge.sh; qacct", .args) %>% system
 
 process_state <- function(.qsub_name="MM_pl") {
   .qs <- system("source /etc/profile.d/sge.sh; qstat", intern=TRUE) 
@@ -317,6 +323,33 @@ get_all_parents_cid <- function(.cid) {
 
 get_daughters_cid <- function(.cid) {
   c(paste0(.cid, 'B'), paste0(.cid, 'T'))
+}
+
+is_parent_cid <- function(.cid, .pid) {
+  # checks if .pid is a parent of .cid (vectorized over .cid)
+  if (length(.pid) != 1) stop(".pid must have length 1.")
+  .out <- logical(length(.cid))
+  for (.i in seq_along(.cid)) {
+    .out[.i] <- .pid %in% get_all_parents_cid(.cid[.i])
+  }
+  return(.out)
+}
+
+which_is_parent_cid <- function(.cid, .pid) {
+  # find which value of .pid is a parent of .cid (vectorized over .pid and .cid)
+  .out <- logical(length(.cid))
+  for (.i in seq_along(.cid)) {
+    .idx <- which(.pid %in% get_all_parents_cid(.cid[.i]))
+    if (length(.idx)==1) {
+      .out[.i] <- .idx
+    } else if (length(.idx)==0) {
+      .out[.i] <- 0
+    } else {
+      warning("several parent indices were found...")
+      .out[.i] <- NA
+    }
+    return(.out)
+  }
 }
 
 genealogy_ontology <- function(.div_min, .div_max) {
