@@ -263,22 +263,22 @@ parse_timm_curation <- function(.path) {
   .ldata <- lapply(seq(length(.id_lines)), function(.i) {
     .start <- .id_lines[.i] + 1
     .stop <- ifelse(.i==length(.id_lines), length(.flines), .id_lines[.i+1] - 1)
-    if (.start <= .stop)
-      return ( .flines[.start:.stop] %>% paste(collapse='\n') %>%                             # concat lines
-                 textConnection %>% read.table(comment.char="", sep=",", header=FALSE, stringsAsFactors=FALSE) )
+    if (.start <= .stop) {
+      .con <- .flines[.start:.stop] %>% paste(collapse='\n') %>% textConnection
+      .out <- read.table(.con, comment.char="", sep=",", header=FALSE, stringsAsFactors=FALSE)
+      close(.con)
+      return (.out)
+    }
   })
-  if (all(sapply(.ldata, is.null))) return(data.frame(type='none', frame=-1, action=NA))
-  # find the width of the largest table
-  .max_cols <- lapply(.ldata, function(.d) dim(.d)[2]) %>% unlist %>% max
+  if (all(sapply(.ldata, is.null))) return(data.frame(type='none', frame=-1))
   # increase the width of narrower dfs (in order to be able to stack them)
   lapply(.ldata, function(.d) {
-    if (is.null(.d) || dim(.d)[2] == .max_cols) return(.d)
-    .d[1, .max_cols] <- NA # add NAs columns if narrower dataframe
-    .d
+    if (is.null(.d)) return(.d)
+    return(.d[, 1:2]) # return only `type` and `frame` (avoid handling a variable number of columns)
   }) %>% 
     # stack all tables
     do.call(rbind, .) %>%
-    setNames(c('type', 'frame', 'xx', 'action'))
+    setNames(c('type', 'frame'))
 }
 
 
