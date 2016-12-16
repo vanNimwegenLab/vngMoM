@@ -493,7 +493,7 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
     geom_rect(aes(xmin=-Inf, xmax=Inf, ymin=ifelse(.log, 0, -Inf), ymax=Inf), alpha=.05, 
               data=data.frame(seq(.facet_min, .facet_max, 2)) %>% setNames(.facet_col)) +
     # theme(.gg_theme, complete=TRUE) +
-    theme(panel.margin = unit(0, "lines"), panel.border=element_blank()) # ,strip.background = element_blank(), strip.text = element_blank()
+    theme(panel.spacing = unit(0, "lines"), panel.border=element_blank()) # ,strip.background = element_blank(), strip.text = element_blank()
   
   if (is.null(.facet_labeller)) {
     .pl <- .pl + facet_grid(reformulate('.', .facet_col), as.table=FALSE)
