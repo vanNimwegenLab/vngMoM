@@ -24,4 +24,3 @@ OUTNAME=$(echo $OUT | perl -pe 's/^>//') # replace `^>` with `` (using regex)
 mkdir -p $(dirname "$OUTPUT") # -p: no error if existing, make parent directories as needed
 mv $OUTNAME $OUTPUT
 rm $INPUT_FILENAME
-

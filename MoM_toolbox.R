@@ -136,7 +136,7 @@ if (!exists("data2preproc", mode="function"))
     file.path(data2preproc_dir(.path), data2preproc_file(.path))
 
 process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE,
-                              .frames_sh_script="get_size_and_fluo_basic.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
+                              .frames_sh_script="get_size_and_fluo.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
                               .qsub_name="MM_pl" # must be shorter than 10 characters
 ) { # browser()
   # check whether some files need to be preprocessed
