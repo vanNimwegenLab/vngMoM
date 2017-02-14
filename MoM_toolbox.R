@@ -179,7 +179,7 @@ process_state <- function(.qsub_name="MM_pl") {
 }
 
 parse_frames_stats <- function(.path) {
-  if (!file.exists(.path)) stop("input path is not valid.")
+  if (!file.exists(.path)) stop(sprintf("input path is not valid (%s)", .path))
   flines <- readLines(.path)
   # browser()
 
@@ -219,7 +219,8 @@ parse_frames_stats <- function(.path) {
   }) %>% 
     do.call(rbind, .) %>% 
     rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
-    mutate(cid=compute_genealogy(id, parent_id, daughter_type) )
+    mutate(cid=compute_genealogy(id, parent_id, daughter_type),
+           fluo_background=fluo_bg_ch_1, fluo_amplitude=fluo_ampl_ch_1)
 }
 
 
@@ -452,7 +453,7 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
       if (unique(.dfc[[.parent_col]]) < 0) return(data.frame())
       .dfp <- filter_(.dfgl, lazyeval::interp(~ cell_id == unique(parent_id), 
                                       cell_id=as.name(.cell_col), parent_id=.dfc[[.parent_col]]))
-      if (dim(.dfp)[1] == 0) return(data.frame())
+      if (nrow(.dfp) == 0) return(data.frame())
       
       if (unique(.dfc[[.facet_col]]) == unique(.dfp[[.facet_col]])) {
         .varp <- filter_(.dfp, sprintf('%s==max(%s)', .time_col, .time_col))[[.var_col]]
@@ -474,6 +475,28 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
                       setNames(paste0(c(.time_col, .var_col), 'p')))
         )
         if(diff(.out[[.facet_col]]) < -1) {
+          .out <- rbind(.out,
+                        data.frame(id=unique(.dfc$id), seq(min(.out[[.facet_col]])+1, max(.out[[.facet_col]])-1),
+                                   time=min(.dfc[[.time_col]])-dt*60/2, 
+                                   timep=min(.dfc[[.time_col]])-dt*60/2,
+                                   var=ifelse(.log, 0, -Inf), varp=Inf) %>% 
+                          setNames(c(.cell_col, .facet_col, .time_col, paste0(.time_col, 'p'), .var_col, paste0(.var_col, 'p'))) )
+        }
+      }
+
+      if (unique(.dfc[[.facet_col]]) < unique(.dfp[[.facet_col]])) {
+        .out <- bind_rows(
+          filter_(ungroup(.dfc), sprintf('%s==min(%s)', .time_col, .time_col)) %>%
+            select_(.cell_col, .facet_col, .time_col, .var_col) %>%
+            mutate_(.dots=list(lazyeval::interp(~tvar-dt*60/2, tvar=as.name(.time_col), dt=dt), "Inf") %>% 
+                      setNames(paste0(c(.time_col, .var_col), 'p'))) ,
+          filter_(ungroup(.dfp), sprintf('%s==max(%s)', .time_col, .time_col)) %>%
+            select_(.cell_col, .facet_col, .time_col, .var_col) %>%
+            mutate_(.dots=list(lazyeval::interp(~tvar+dt*60/2, tvar=as.name(.time_col), dt=dt), as.character(ifelse(.log, 0, -Inf))) %>% 
+                      setNames(paste0(c(.time_col, .var_col), 'p')))
+        )
+        # add vertical line in intermediate facets if required
+        if(diff(.out[[.facet_col]]) > 1) {
           .out <- rbind(.out,
                         data.frame(id=unique(.dfc$id), seq(min(.out[[.facet_col]])+1, max(.out[[.facet_col]])-1),
                                    time=min(.dfc[[.time_col]])-dt*60/2, 
