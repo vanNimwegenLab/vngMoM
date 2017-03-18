@@ -135,7 +135,7 @@ if (!exists("data2preproc", mode="function"))
   data2preproc <- function(.path)
     file.path(data2preproc_dir(.path), data2preproc_file(.path))
 
-process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE,
+process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE, .skip=FALSE,
                               .frames_sh_script="get_size_and_fluo.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
                               .qsub_name="MM_pl" # must be shorter than 10 characters
 ) { # browser()
@@ -144,6 +144,9 @@ process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE,
   .preprocessed <- file.exists(.out)
   if (all(.preprocessed) && !.force) {
     return(.out) 
+  } else if (.skip) {
+    # return already preprocessed files
+    return(ifelse(.preprocessed, .out, NA)) 
   } else {
     # call qsub
     lapply(.x[ which(.force | !.preprocessed) ],
@@ -220,7 +223,8 @@ parse_frames_stats <- function(.path) {
     do.call(rbind, .) %>% 
     rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
     mutate(cid=compute_genealogy(id, parent_id, daughter_type),
-           fluo_background=fluo_bg_ch_1, fluo_amplitude=fluo_ampl_ch_1)
+           fluo_background=if (exists('fluo_bg_ch_1', where=.)) fluo_bg_ch_1 else fluo_background,
+           fluo_amplitude=if (exists('fluo_ampl_ch_1', where=.)) fluo_ampl_ch_1 else fluo_amplitude )
 }
 
 
@@ -324,6 +328,11 @@ get_all_parents_cid <- function(.cid) {
 
 get_daughters_cid <- function(.cid) {
   c(paste0(.cid, 'B'), paste0(.cid, 'T'))
+}
+
+has_progeny <- function(.cid, .all_ids) {
+  .all_ids <- unique(.all_ids)
+  is.element(paste0(.cid, 'B'), .all_ids) | is.element(paste0(.cid, 'T'), .all_ids)
 }
 
 is_parent_cid <- function(.cid, .pid) {
@@ -445,6 +454,7 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
                                     .cell_col='id', .parent_col='parent_id', .facet_col='b_rank', 
                                     .log=FALSE, .col=NA, .show_cellid=FALSE, .show_all=FALSE, 
                                     .facet_labeller=NULL, .gg_theme=theme_get()) {
+  if (nrow(.df) == 0) return(ggplot())
   
   .df_div <- .df %>% group_by_(.cell_col) %>% 
     do((function(.dfgl, .dfc) { # compute_div_between_facets
