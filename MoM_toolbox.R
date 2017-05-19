@@ -14,6 +14,7 @@ scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.v
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 brewer_cols <- c(RColorBrewer::brewer.pal(4, 'Set1'), 'gray42')
 brewer_all_cols <- RColorBrewer::brewer.pal(9, 'Set1')
+brewer_paired_cols <- RColorBrewer::brewer.pal(12, "Paired")
 scale_colour_periodic_brewer <- function(..., .n=4) 
   scale_colour_manual(..., values = rep(c(brewer_all_cols[1:.n], 'gray42'), 1000), na.value='gray25')
 scale_fill_periodic_brewer <- function(..., .n=4) 
@@ -213,7 +214,8 @@ parse_frames_stats <- function(.path) {
     .df <- read.table(.con, comment.char="", header=FALSE) %>% setNames(.colnames)
     close(.con) # close text connection
     .info <- flines[id_lines[.i-1]] %>% # extract line
-      strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
+      strsplit('[ \t]') %>% .[[1]] %>%     # split to vector
+      # strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
       .[-1] %>% t %>% data.frame(stringsAsFactors=FALSE) %>%    # convert to df
       setNames(.fieldnames[-1]) %>%
       mutate(cell_ID=as.numeric(cell_ID), parent_ID=as.numeric(parent_ID), 
@@ -360,6 +362,14 @@ which_is_parent_cid <- function(.cid, .pid) {
     }
     return(.out)
   }
+}
+
+compute_daughters_numbers <- function(.cid)
+  (paste0(.cid, 'B') %in% .cid) + (paste0(.cid, 'T') %in% .cid)
+
+compute_daughters_numbers_raw <- function(.id, .pid) {
+  .idx <- which(!duplicated(.id)) # indices of first occurences in .id
+  sapply(.id, function(.i) sum(.pid[.idx]==.i))
 }
 
 genealogy_ontology <- function(.div_min, .div_max) {
