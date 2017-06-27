@@ -153,7 +153,7 @@ process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE, .s
     lapply(.x[ which(.force | !.preprocessed) ],
            function(.f) system(sprintf("source /etc/profile.d/sge.sh; qsub -N %s -cwd %s %s %s %s", 
                                        .qsub_name, file.path(.scripts_path, .frames_sh_script), 
-                                       file.path(.scripts_path, .frames_pl_script), .f, data2preproc(.f)))) 
+                                       file.path(.scripts_path, .frames_pl_script), .f, .data2preproc(.f)))) 
     stop("Some files required preprocessing on the cluster. Once they're processed, run the same command again\n",
          sprintf("Hint: use `process_state(\"%s\")` to check if the processing is still running...", .qsub_name),
          call.=FALSE)
@@ -290,6 +290,7 @@ parse_timm_curation <- function(.path) {
 
 
 # genealogy utilities ####
+# requires the following cid format: 0BBBTBT (NB: Erik's has an extra colon e.g. 0:BBBTBT)
 compute_genealogy <- function(.id, .pid, .dgtype) {
 # browser()
   # keep only one row per cell
@@ -360,8 +361,8 @@ which_is_parent_cid <- function(.cid, .pid) {
       warning("several parent indices were found...")
       .out[.i] <- NA
     }
-    return(.out)
   }
+  return(.out)
 }
 
 compute_daughters_numbers <- function(.cid)
@@ -585,7 +586,7 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
                              data=.df %>% mutate_(.dots=list("-1") %>% setNames(.facet_col)) )
   }
   
-  if(.log) .pl <- .pl + scale_y_log10()
+  if(.log) .pl <- .pl + scale_y_continuous(trans='log2')
   return(.pl)
 }
 

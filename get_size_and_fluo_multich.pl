@@ -101,7 +101,7 @@ while(<F>){
     $line =~ s/\n//;
     if($line =~ /numChannels\s*\=\s*(\d+)/){
 	$num_channel = $1;
-	print G "#frame\tvertical_top\tvertical_botom\tcell_num_in_lane\ttotal_cell_in_lane\tlength(pixel)";
+	print G "#frame\tvertical_top\tvertical_botom\tlength_moma\tcell_num_in_lane\ttotal_cell_in_lane\tlength(pixel)";
 	for($ch = 1;$ch<$num_channel;++$ch){
 	    print G "\tfluo_bg_ch_" , $ch , "\tfluo_ampl_ch_" , $ch;
 	}
@@ -479,7 +479,7 @@ while(<F>){
 		#Fluoresence data:
 		#background
 		#amplitude
-		$stats = $curframe . "\t" . $toppixel . "\t" . $botpixel . "\t" . $cellnum . "\t" . $cellinlane . "\t" . $mysize . "\t" . $b . "\t" . $A . "\t";
+		$stats = $curframe . "\t" . $toppixel . "\t" . $botpixel . "\t" . $florheight . "\t" . $cellnum . "\t" . $cellinlane . "\t" . $mysize . "\t" . $b . "\t" . $A . "\t";
 	    }
 	    else{#add curent background and amplitude
 		$stats = $stats . $b . "\t" . $A . "\t";
