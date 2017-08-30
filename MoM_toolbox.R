@@ -201,7 +201,7 @@ parse_frames_stats <- function(.path) {
     gsub("botom", "bottom", .)
   
   # parse all cells
-  id_lines <- grep("^>CELL", flines)
+  id_lines <- c(grep("^>CELL", flines), length(flines) + 1) # add the last line
   lapply(seq_along(id_lines)[-1], function(.i) {
     # browser()
     #                     .df <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
