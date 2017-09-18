@@ -141,6 +141,35 @@ gm_mean = function(x, na.rm=TRUE) {
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
 }
 
+cov_pop <- function(x,y=NULL) {
+  browser()
+  cov(x,y)*(nrow(x)-1)/nrow(x)
+}
+
+compute_combn_covar <- function(.df, .groups="str_cond", .vars=
+                                  list(l_birth="l_birth", 
+                                       l_increase=c("l_div", "dl"),
+                                       div_time=c("div_time", "alpha"))) {
+  # vars is a named list of named vectors of variable names (provided as strings)
+  # for vectors with a single value, the variable is  explicitely 
+  stopifnot(!is.null(names(.vars)))
+  # check that all variables with more than one value have names
+  stopifnot(if (any((names(.vars)==""))) !any( (names(.vars)=="") & (sapply(.vars, length)>1) ) else TRUE) # forbid F/T
+  # browser()
+  .out <- .df %>% group_by_(.groups) %>% 
+    select(!!unlist(.vars)) 
+  
+  .names <- names(.vars)
+  for (.i in which(.names!=''))
+    .out <- gather_(.out, paste0(.names[.i], '_var'), .names[.i], .vars[[.i]]) %>% 
+    group_by_(paste0(.names[.i], '_var'), add=TRUE)
+  
+  .out %>% 
+    do(covar=cov_pop(select_(., .dots=paste0(.names[which(.names!='')], '_var') %>% c(.groups) %>% paste0('-', .)) ),
+       scaled_covar=cov_pop(scale(select_(., .dots=paste0(.names[which(.names!='')], '_var') %>% c(.groups) %>% paste0('-', .)) )) ) %>% 
+    mutate(r2=1-det(covar)/prod(diag(covar)))
+}
+
 # MoMA loading ####
 if (!exists("data2preproc_dir", mode="function"))
   data2preproc_dir <- function(.f) dirname(.f)
@@ -552,8 +581,7 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
     geom_rect(aes(xmin=-Inf, xmax=Inf, ymin=ifelse(.log, 0, -Inf), ymax=Inf), alpha=.05, 
               data=data.frame(seq(.facet_min, .facet_max, 2)) %>% setNames(.facet_col)) +
     # theme(.gg_theme, complete=TRUE) +
-    theme(panel.spacing = unit(0, "lines"), panel.border=element_blank()) # ,strip.background = element_blank(), strip.text = element_blank()
-  
+    theme(panel.margin = unit(0, "lines"), panel.border=element_blank()) # ,strip.background = element_blank(), strip.text = element_blank()  
   if (is.null(.facet_labeller)) {
     .pl <- .pl + facet_grid(reformulate('.', .facet_col), as.table=FALSE)
   } else {
