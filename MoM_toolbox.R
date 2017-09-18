@@ -1,14 +1,16 @@
 mylibs <- c("stats", # required to prevent hiding dplyr::filter later on
             "dplyr", # load before tidyr to force using the user version
             "tools", "stringi", "stringr", "tidyr", # "readr",
-            "ggplot2", "scales", "gridExtra",
-            "RcppArmadillo", "ccaPP")
+            "ggplot2", "scales", "gridExtra", "viridis",
+            "RcppArmadillo", "ccaPP") # RcppEigen is an alternative with more options for fastLm but slightly slower
 invisible( suppressPackageStartupMessages( # don't use %>% before loading dplyr
   lapply(mylibs, library, character.only=TRUE) ))
 options("readr.num_columns" = 0) # disable printing when loading data with readr
 
 # ggplot2 housekeeping ####
 theme_set(theme_bw())
+scale_colour_continuous <- scale_colour_viridis
+scale_fill_continuous <- scale_fill_viridis
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1", na.value='gray50')
 scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.value='gray50')
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
@@ -83,6 +85,19 @@ between_or <- function(.x, .a, .b) {
   lapply(seq(length(.a)), function(.i) between(.x, .a[.i], .b[.i])) %>%
     do.call(cbind, .) %>%
     apply(1, any)
+}
+
+slice_groups <- function(dt,v) {
+  # adapted from https://github.com/tidyverse/dplyr/issues/1331#issue-101839062
+  # could be modernized using nest and unnest from tidyr
+  stopifnot('data.frame' %in% class(dt))
+  stopifnot(v>0, (v%%1)==0)
+  # if (n_groups(dt) >= 2) warning('Only 1 group to slice')
+  # get the grouping variables
+  groups <- dt %>% select %>% distinct %>% 
+    ungroup %>% slice(v)
+  #subset our original data
+  semi_join(dt, groups)
 }
 
 value_occurence_index <- function(.m) {
