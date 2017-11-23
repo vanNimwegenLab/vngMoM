@@ -20,7 +20,7 @@ It should be as simple as running the following:
 
 ```
 # install.packages('devtools') # only if devtools isn't already installed
-devtols::install_github('')
+devtols::install_github('vanNimwegenLab/vngMoM')
 ```
 
 ## Contribution

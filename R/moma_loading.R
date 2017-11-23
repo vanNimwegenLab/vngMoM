@@ -3,10 +3,11 @@ utils::globalVariables(c(".", "msg", "name", "n_jobs", "state",
                          "cell_ID", "parent_ID", "first_frame", "last_frame", "type_of_end", "daughter_type",
                          "id", "parent_id", "end_type", "cid", "fluo_background", "fluo_amplitude", "fluo_bg_ch_1", "fluo_ampl_ch_1"))
 
-process_moma_data <- function(.x, .data2preproc, .scripts_path, .force=FALSE, .skip=FALSE,
+process_moma_data <- function(.x, .data2preproc, .scripts_path=system.file("perl", ".", package="vngMoM"), .force=FALSE, .skip=FALSE,
                               .frames_sh_script="get_size_and_fluo.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
                               .qsub_name="MM_pl" # must be shorter than 10 characters
-) { # browser()
+) { 
+  # browser()
   # check whether some files need to be preprocessed
   .out <- .data2preproc(.x)
   .preprocessed <- file.exists(.out)

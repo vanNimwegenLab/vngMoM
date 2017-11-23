@@ -12,6 +12,7 @@ globalVariables(c("covar"))
     data2preproc <- function(.path)
       file.path(data2preproc_dir(.path), data2preproc_file(.path))
   
+  invisible()
 }
 
 cluster_assign_obj <- function(.cl, ...) {
