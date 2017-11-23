@@ -1,3 +1,8 @@
+---
+title: "vngMoM"
+---
+
+
 After image acquisition, Mother Machine data are processed using MoMA. Here we describe the analysis of MoMA's output using R, in particular:
 - how to load MoMA data and apply its postprocessing scripts in perl
 - how to concatenate all data analysed in a project in the same dataframe
@@ -6,6 +11,36 @@ After image acquisition, Mother Machine data are processed using MoMA. Here we d
 Most of this R code rely heavily on Hadley Wickham's libraries, including stringr, tidyr, dplyr, multidplyr and ggplot2. Getting started with dplyr and ggplot2 first will definitely help you follow this analysis.
 
 `.` is the project directory. All paths to data files (raw or preprocessed) must be defined locally.
+
+
+# Getting started
+## Installation
+
+It should be as simple as running the following:
+
+```
+# install.packages('devtools') # only if devtools isn't already installed
+devtols::install_github('')
+```
+
+## Contribution
+In case you're granted read-only access to https://github.com/vanNimwegenLab/vngWetLabR repository, the recommend use is the following:
+
+- fork this repository in your own account (it will be kept private even if you use a free github plan; by the way, you can get 5 private repositories for free at https://education.github.com/discount_requests/new).
+- clone your repository (e.g. https://github.com/myAccount/vngWetLabR) to your local computer:  
+`git clone git@github.com:myAccount/vngWetLabR.git`
+- add https://github.com/vanNimwegenLab/vngWetLabR as a new remote to your local repository, calling it `vng`:  
+`git remote add vng git@github.com:vanNimwegenLab/vngWetLabR.git`
+- you can now pull from the vanNimwegenLab/vngWetLabR repository and push to yours if you want to update it / share new code:  
+`git pull vng master`  
+`git pull vng dev` (if you want to pull the `dev` branch)  
+`git push origin master` (or `git push` if you're lazy)
+- after pushing your changes to your local repository (using an up-to-date version of vanNimwegenLab/vngWetLabR), you can create a pull request in the github web interface.
+- (optionnal, and discouraged!) if you want to pull from `vng` and push to `origin` by default, you can change the git config locally:  
+`git config --local branch.master.remote vng` (set `vng` as default remote)  
+`git config --local branch.master.pushremote origin` (override the default push remote)
+
+
 
 
 # Converting MoMA output using postprocessing perl scripts
