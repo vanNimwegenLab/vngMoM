@@ -159,8 +159,8 @@ genealogy_relationship <- function(.s, .dist_max=3) {
   }
   if (.min_l - .anc_length > .dist_max)
     return(NULL)
-  .div_1 <- stringr::str_sub(.s[1], .anc_length+1, -1) %>% stringr::str_length # -1 to select the last char
-  .div_2 <- stringr::str_sub(.s[2], .anc_length+1, -1) %>% stringr::str_length # -1 to select the last char
+  .div_1 <- stringr::str_sub(.s[1], .anc_length+1, -1) %>% stringr::str_length() # -1 to select the last char
+  .div_2 <- stringr::str_sub(.s[2], .anc_length+1, -1) %>% stringr::str_length() # -1 to select the last char
   .div_min <- min(.div_1, .div_2)
   .div_max <- max(.div_1, .div_2)
   if (.div_max > .dist_max) 

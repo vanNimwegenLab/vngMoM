@@ -1,11 +1,6 @@
 # plotting tracks ####
 utils::globalVariables(c(".", "dt"))
 
-if (!exists("scale_colour_periodic_brewer", mode="function"))
-  scale_colour_periodic_brewer <- function(..., .n=4) 
-    ggplot2::scale_colour_manual(..., values = rep(c(RColorBrewer::brewer.pal(9, 'Set1')[1:.n], 'gray42'), 1e4), 
-                                 na.value='gray25')
-
 plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec', 
                                     .cell_col='id', .parent_col='parent_id', .facet_col='b_rank', 
                                     .log=FALSE, .col=NA, .show_cellid=FALSE, .show_all=FALSE, 

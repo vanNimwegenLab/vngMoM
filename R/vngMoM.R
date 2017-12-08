@@ -3,6 +3,11 @@ globalVariables(c("covar"))
 .onLoad <- function(libname, pkgname) {
   options("readr.num_columns" = 0) # disable printing when loading data with readr
   
+  if (!exists("scale_colour_periodic_brewer", mode="function"))
+    scale_colour_periodic_brewer <- function(..., .n=4) 
+      ggplot2::scale_colour_manual(..., values = rep(c(RColorBrewer::brewer.pal(9, 'Set1')[1:.n], 'gray42'), 1e4), 
+                                   na.value='gray25')
+
   if (!exists("data2preproc_dir", mode="function"))
     data2preproc_dir <- function(.f) dirname(.f)
   if (!exists("data2preproc_file", mode="function"))

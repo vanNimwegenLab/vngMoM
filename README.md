@@ -16,12 +16,17 @@ Most of this R code rely heavily on Hadley Wickham's libraries, including string
 # Getting started
 ## Installation
 
-It should be as simple as running the following:
+As long as the Github repo is private, there are two possible ways:
 
+1. install a [Private Access Token](https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/). Afterwards, it should be as simple as running the following: 
 ```
 # install.packages('devtools') # only if devtools isn't already installed
-devtols::install_github('vanNimwegenLab/vngMoM')
+devtools::install_github('vanNimwegenLab/vngMoM', auth_token='paste_your_PAT_here')
 ```
+
+2. clone/pull/download the package from github and run `devtools::install_local('.../.../vngMoM')`  
+(you need to edit the path to the directory you downloaded)
+
 
 ## Contribution
 In case you're granted read-only access to https://github.com/vanNimwegenLab/vngWetLabR repository, the recommend use is the following:
