@@ -1,7 +1,9 @@
 # MoMA loading ####
 utils::globalVariables(c(".", "msg", "name", "n_jobs", "state",
+                         "n",
                          "cell_ID", "parent_ID", "first_frame", "last_frame", "type_of_end", "daughter_type",
-                         "id", "parent_id", "end_type", "cid", "fluo_background", "fluo_amplitude", "fluo_bg_ch_1", "fluo_ampl_ch_1"))
+                         "id", "parent_id", "end_type", "cid", "fluo_background", "fluo_amplitude", "fluo_bg_ch_1", "fluo_ampl_ch_1",
+                         "ndgt", "end_type_moma"))
 
 process_moma_data <- function(.x, .data2preproc, .scripts_path=system.file("perl", ".", package="vngMoM"), .force=FALSE, .skip=FALSE,
                               .frames_sh_script="get_size_and_fluo.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
@@ -19,7 +21,7 @@ process_moma_data <- function(.x, .data2preproc, .scripts_path=system.file("perl
   } else {
     # call qsub
     lapply(.x[ which(.force | !.preprocessed) ],
-           function(.f) system(sprintf("source /etc/profile.d/sge.sh; qsub -N %s -cwd %s %s %s %s", 
+           function(.f) system(sprintf("sbatch --job-name=%s %s %s %s %s", 
                                        .qsub_name, file.path(.scripts_path, .frames_sh_script), 
                                        file.path(.scripts_path, .frames_pl_script), .f, .data2preproc(.f)))) 
     stop("Some files required preprocessing on the cluster. Once they're processed, run the same command again\n",
@@ -28,21 +30,25 @@ process_moma_data <- function(.x, .data2preproc, .scripts_path=system.file("perl
   }
 }
 
-qstat <- function(.args="")
-  paste("source /etc/profile.d/sge.sh; qstat", .args) %>% system
+squeue <- function(.user=Sys.info()[['user']], .args="", .intern=FALSE)
+  paste("squeue -u", .user, .args) %>% system(.intern)
 
-qacct <- function(.args="")
-  paste("source /etc/profile.d/sge.sh; qacct", .args) %>% system
+sacct <- function(.jobid, .args="")
+  paste("sacct -j", .jobid, .args) %>% system
 
 process_state <- function(.qsub_name="MM_pl") {
-  .qs <- system("source /etc/profile.d/sge.sh; qstat", intern=TRUE) 
+  .qs <- squeue(.intern=TRUE) 
   
-  if (length(.qs) == 0) {
+  if (length(.qs) == 1) {
     return("All jobs have been processed.")
   } else {
-    paste(.qs[-2], collapse='\n') %>% readr::read_table() %>%
+    .qsn <- .qs[1] %>% stringr::str_to_lower() %>% 
+      stringr::str_split("\\s+") %>% 
+      (function(.x) .x[[1]][-length(.x[[1]])])
+    paste(.qs[-1], collapse='\n') %>% 
+      readr::read_fwf(readr::fwf_widths(c(10, 20, 20, 10, 10, 10, 10, 10, 20), col_names=.qsn) ) %>% 
       dplyr::filter(name==.qsub_name) %>%
-      dplyr::group_by(state) %>% dplyr::summarise(n_jobs=dplyr::n()) %>% 
+      dplyr::group_by(state) %>% dplyr::summarise(n_jobs=n()) %>% 
       dplyr::rowwise() %>% 
       dplyr::mutate(msg=sprintf('%d job(s) in state %s', n_jobs, state)) %>% 
       .[['msg']] %>% paste(collapse='\n') %>% 
@@ -94,7 +100,13 @@ parse_frames_stats <- function(.path) {
     dplyr::rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
     dplyr::mutate(cid=compute_genealogy(id, parent_id, daughter_type),
                   fluo_background=if (exists('fluo_bg_ch_1', where=.)) fluo_bg_ch_1 else fluo_background,
-                  fluo_amplitude=if (exists('fluo_ampl_ch_1', where=.)) fluo_ampl_ch_1 else fluo_amplitude )
+                  fluo_amplitude=if (exists('fluo_ampl_ch_1', where=.)) fluo_ampl_ch_1 else fluo_amplitude ) %>% 
+    # fix end_type for pruned cells
+    dplyr::mutate(ndgt=compute_daughters_numbers(cid)) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(end_type_moma=end_type,
+           end_type=ifelse(ndgt==0, "lost", "weird"),
+           end_type=ifelse(ndgt==2, "div", end_type))
 }
 
 

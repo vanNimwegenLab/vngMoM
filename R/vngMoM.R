@@ -109,9 +109,14 @@ mycut <- function(.x, ...) {
   .mids[.k]
 }
 
-gm_mean = function(x, na.rm=TRUE) {
+gm_mean <- function(x, na.rm=TRUE) {
 # computes geometric mean (from http://stackoverflow.com/a/25555105/576684)
   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+cor_sym <- function(x, y, ...) {
+# compute correlation after duplicating the values to have a symmetric scatter relative to the first diagonale
+  stats::cor(c(x, y), c(y, x), ...)
 }
 
 cov_pop <- function(x,y=NULL) {
@@ -141,4 +146,20 @@ compute_combn_covar <- function(.df, .groups="str_cond", .vars=
     dplyr::do(covar=cov_pop(dplyr::select_(., .dots=paste0(.names[which(.names!='')], '_var') %>% c(.groups) %>% paste0('-', .)) ),
        scaled_covar=cov_pop(scale(dplyr::select_(., .dots=paste0(.names[which(.names!='')], '_var') %>% c(.groups) %>% paste0('-', .)) )) ) %>% 
     dplyr::mutate(r2=1-det(covar)/prod(diag(covar)))
+}
+
+median_pi <- function(d){
+# compute the median and its 95% posterior interval
+  d <- sort(d)
+  n <- length(d)
+  if (n<=1) return(data.frame(y=NA, ymin=NA, ymax=NA))
+  
+  nmedian <- ceiling(n/2)
+  nmin <- round(n/2 - sqrt(n*2))
+  nmax <- round(n/2 + sqrt(n*2))
+  
+  if (nmin<1) nmin <- 1
+  if (nmax>n) nmax <- n
+  
+  data.frame(y=d[nmedian], ymin=d[nmin], ymax=d[nmax])
 }

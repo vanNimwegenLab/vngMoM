@@ -94,13 +94,13 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
                    alpha=.3, lty='11', data=.df_div) +
       # show cell traces
       ggplot2::geom_path(ggplot2::aes_(as.name(.time_col), as.name(.var_col), col=lazyeval::interp(~factor(id), id=as.name(.cell_col))), data=.df) +
-      scale_colour_periodic_brewer(guide='none')
+      ggCustomTJ::scale_colour_periodic_brewer(guide='none')
     
     # show cell numbers
     if (.show_cellid)
       .pl <- .pl + ggplot2::geom_text(ggplot2::aes_(as.name(.time_col), as.name(.var_col), label=as.name(.cell_col), 
                                   col=lazyeval::interp(~factor(id), id=as.name(.cell_col))), 
-                             size=2, hjust=0, vjust=1, data=.df %>% dplyr::group_by_(.cell_col) %>% dplyr::filter(dplyr::row_number()==1) )
+                             size=2, hjust=0, vjust=1, data=.df %>% dplyr::group_by_(.cell_col) %>% dplyr::filter(row_number()==1) ) #dplyr::row_number()
     # show all traces in one panel
     if (.show_all)
       .pl <- .pl + ggplot2::geom_path(ggplot2::aes_(as.name(.time_col), as.name(.var_col), col=lazyeval::interp(~factor(id), id=as.name(.cell_col))), 
