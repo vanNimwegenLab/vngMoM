@@ -4,13 +4,15 @@ utils::globalVariables(c(".", "dt"))
 plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec', 
                                     .cell_col='id', .parent_col='parent_id', .facet_col='b_rank', 
                                     .log=FALSE, .col=NA, .show_cellid=FALSE, .show_all=FALSE, 
-                                    .facet_labeller=NULL, .gg_theme=ggplot2::theme_get(), .dt=dt) {
+                                    .facet_labeller=NULL, .gg_theme=ggplot2::theme_get(), .dt) {
   if (nrow(.df) == 0) return(ggplot2::ggplot())
-  
   .df_div <- .df %>% dplyr::group_by_(.cell_col) %>% 
     dplyr::do((function(.dfgl, .dfc) { # compute_div_between_facets
       # .dfgl: dataframe of the entire GL
       # .dfc: dataframe of the current cell
+
+      # browser()
+      
       if (unique(.dfc[[.parent_col]]) < 0) return(data.frame())
       .dfp <- dplyr::filter_(.dfgl, lazyeval::interp(~ cell_id == unique(parent_id), 
                                               cell_id=as.name(.cell_col), parent_id=.dfc[[.parent_col]]))
@@ -20,7 +22,7 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
         .varp <- dplyr::filter_(.dfp, sprintf('%s==max(%s)', .time_col, .time_col))[[.var_col]]
         .out <- dplyr::filter_(.dfc, sprintf('%s==min(%s)', .time_col, .time_col)) %>% 
           dplyr::select_(.cell_col, .facet_col, .time_col, .var_col) %>%
-          dplyr::mutate_(.dots=list(lazyeval::interp(~tvar-.dt*60, tvar=as.name(.time_col), dt=.dt), 
+          dplyr::mutate_(.dots=list(lazyeval::interp(~tvar-.dt, tvar=as.name(.time_col), dt=.dt), 
                              lazyeval::interp(~.varp, .varp=.varp)) %>% 
                     stats::setNames(paste0(c(.time_col, .var_col), 'p')))
       }
@@ -28,18 +30,18 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
         .out <- dplyr::bind_rows(
           dplyr::filter_(dplyr::ungroup(.dfc), sprintf('%s==min(%s)', .time_col, .time_col)) %>%
             dplyr::select_(.cell_col, .facet_col, .time_col, .var_col) %>%
-            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar-.dt*60/2, tvar=as.name(.time_col), dt=.dt), as.character(ifelse(.log, 0, -Inf))) %>% 
+            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar-.dt/2, tvar=as.name(.time_col), dt=.dt), as.character(ifelse(.log, 0, -Inf))) %>% 
                       stats::setNames(paste0(c(.time_col, .var_col), 'p'))) ,
           dplyr::filter_(dplyr::ungroup(.dfp), sprintf('%s==max(%s)', .time_col, .time_col)) %>%
             dplyr::select_(.cell_col, .facet_col, .time_col, .var_col) %>%
-            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar+.dt*60/2, tvar=as.name(.time_col), dt=.dt), "Inf") %>% 
+            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar+.dt/2, tvar=as.name(.time_col), dt=.dt), "Inf") %>% 
                       stats::setNames(paste0(c(.time_col, .var_col), 'p')))
         )
         if(diff(.out[[.facet_col]]) < -1) {
           .out <- rbind(.out,
                         data.frame(id=unique(.dfc$id), seq(min(.out[[.facet_col]])+1, max(.out[[.facet_col]])-1),
-                                   time=min(.dfc[[.time_col]])-.dt*60/2, 
-                                   timep=min(.dfc[[.time_col]])-.dt*60/2,
+                                   time=min(.dfc[[.time_col]])-.dt/2, 
+                                   timep=min(.dfc[[.time_col]])-.dt/2,
                                    var=ifelse(.log, 0, -Inf), varp=Inf) %>% 
                           stats::setNames(c(.cell_col, .facet_col, .time_col, paste0(.time_col, 'p'), .var_col, paste0(.var_col, 'p'))) )
         }
@@ -49,19 +51,19 @@ plot_faceted_var_tracks <- function(.df, .var_col='gfp_nb', .time_col='time_sec'
         .out <- dplyr::bind_rows(
           dplyr::filter_(dplyr::ungroup(.dfc), sprintf('%s==min(%s)', .time_col, .time_col)) %>%
             dplyr::select_(.cell_col, .facet_col, .time_col, .var_col) %>%
-            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar-.dt*60/2, tvar=as.name(.time_col), dt=.dt), "Inf") %>% 
+            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar-.dt/2, tvar=as.name(.time_col), dt=.dt), "Inf") %>% 
                       stats::setNames(paste0(c(.time_col, .var_col), 'p'))) ,
           dplyr::filter_(dplyr::ungroup(.dfp), sprintf('%s==max(%s)', .time_col, .time_col)) %>%
             dplyr::select_(.cell_col, .facet_col, .time_col, .var_col) %>%
-            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar+.dt*60/2, tvar=as.name(.time_col), dt=.dt), as.character(ifelse(.log, 0, -Inf))) %>% 
+            dplyr::mutate_(.dots=list(lazyeval::interp(~tvar+.dt/2, tvar=as.name(.time_col), dt=.dt), as.character(ifelse(.log, 0, -Inf))) %>% 
                       stats::setNames(paste0(c(.time_col, .var_col), 'p')))
         )
         # add vertical line in intermediate facets if required
         if(diff(.out[[.facet_col]]) > 1) {
           .out <- rbind(.out,
                         data.frame(id=unique(.dfc$id), seq(min(.out[[.facet_col]])+1, max(.out[[.facet_col]])-1),
-                                   time=min(.dfc[[.time_col]])-.dt*60/2, 
-                                   timep=min(.dfc[[.time_col]])-.dt*60/2,
+                                   time=min(.dfc[[.time_col]])-.dt/2, 
+                                   timep=min(.dfc[[.time_col]])-.dt/2,
                                    var=ifelse(.log, 0, -Inf), varp=Inf) %>% 
                           stats::setNames(c(.cell_col, .facet_col, .time_col, paste0(.time_col, 'p'), .var_col, paste0(.var_col, 'p'))) )
         }
