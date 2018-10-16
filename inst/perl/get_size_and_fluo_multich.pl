@@ -354,7 +354,7 @@ while(<F>){
 	}
     }
     #line with fluorescence column intensities
-    elsif($line =~ /ch\=(\d+)\;\s+output\=COLUMN\_INTENSITIES\;\s+([\d\.\;\s]+)/){
+    elsif($line =~ /ch\=(\d+)\;\s+output\=COLUMN\_INTENSITIES\;\s+([\-\d\.\;\s]+)/){
 	$channel = $1;
 	$vals = $2;
 	$vals =~ s/\;/ /g;
@@ -369,107 +369,113 @@ while(<F>){
 		}
 	    }
 	    $num = @in;
-	    
-	    #get maximum and minimum
-	    $max = -10000000;
-	    $min = 100000000;
-	    for($k=0;$k<$num;++$k){
-		if($in[$k] > $max){
-		    $max = $in[$k];
+
+	    if($num >= 10){
+		#get maximum and minimum
+		$max = -10000000;
+		$min = 100000000;
+		for($k=0;$k<$num;++$k){
+		    if($in[$k] > $max){
+			$max = $in[$k];
+		    }
+		    if($in[$k] < $min){
+			$min = $in[$k];
+		    }
 		}
-		if($in[$k] < $min){
-		    $min = $in[$k];
+		
+		#Initial guess at parameters
+		$mu = $num/2;
+		$del= 5.5;
+		$diff = 1;
+		$b = $min;
+		$A = $max-$min;
+		my @rho = ();
+		while($diff > 0.01){
+		    #Set rho, A, and B using EM equation
+		    $rhosum = 0;
+		    for($i=0;$i<$num;++$i){
+		    #calc 1/(1+(x-mu)^2/del^2)
+			$rho[$i] = ($i-$mu)/$del;
+			$rho[$i] = $rho[$i]*$rho[$i];
+			$rho[$i] = 1.0/(1.0+$rho[$i]);
+			$rhosum += $rho[$i];
+		    }
+		    
+		    $bnew = 0;
+		    for($i=0;$i<$num;++$i){
+			$bnew += $in[$i]*$b/($b+$A*$rho[$i]);
+		    }
+		    $bnew /= $num;
+		    
+		    $Anew = 0;
+		    for($i=0;$i<$num;++$i){
+			$Anew += $in[$i]*$A*$rho[$i]/($b+$A*$rho[$i]);
+		    }
+		    $Anew /= $rhosum;
+		    
+		    #Get the new mu using binary search
+		    $curmin = 40;
+		    $curmax = 60;
+		    while($curmax-$curmin > 0.01){
+			$curmu = ($curmin+$curmax)/2;
+			$deriv = 0;
+			for($i=0;$i<$num;++$i){
+			    $thisrho = ($i-$curmu)/$del;
+			    $thisrho = $thisrho*$thisrho;
+			    $thisrho = 1.0/(1.0+$thisrho);
+			    $deriv += ($i-$mu)*$thisrho*$thisrho*(-1.0+$in[$i]/($bnew+$Anew*$thisrho));
+			}
+			if($deriv>0){
+			    $curmin = $curmu;
+			}
+			else{
+			    $curmax = $curmu;
+			}
+		    }
+		    $munew = ($curmax+$curmin)/2;
+		    
+		    #Get new delta (width of Cauchy peak) using binary search
+		    $deltamax = 12.0;
+		    $deltamin = 3.0;
+		    while($deltamax-$deltamin > 0.01){
+			$curdel = ($deltamax+$deltamin)/2.0;
+			$deriv = 0;
+			for($i=0;$i<$num;++$i){
+			    $thisrho = ($i-$munew)/$curdel;
+			    $thisrho = $thisrho*$thisrho;
+			    $thisrho = 1.0/(1.0+$thisrho);
+			    $cur = $thisrho*(1.0-$thisrho)*(-1.0 + $in[$i]/($bnew+$Anew*$thisrho));
+			    $deriv += $cur;
+			}
+			if($deriv > 0){
+			    $deltamin = $curdel;
+			}
+			else{
+			    $deltamax = $curdel;
+			}
+		    }
+		    $deltanew = $curdel;
+		    
+		    $diff = 0;
+		    $diff += abs($Anew-$A)/($Anew+$A);
+		    $diff += abs($bnew-$b)/($b+$bnew);
+		    $diff += abs($munew-$mu)/($munew+$mu);
+		    $diff += abs($deltanew-$del)/($deltanew+$del);
+		    
+		    $b = $bnew;
+		    $A = $Anew;
+		    $mu = $munew;
+		    $del = $deltanew;
 		}
 	    }
-	    
-	    #Initial guess at parameters
-	    $mu = $num/2;
-	    $del= 5.5;
-	    $diff = 1;
-	    $b = $min;
-	    $A = $max-$min;
-	    my @rho = ();
-	    while($diff > 0.01){
-		#Set rho, A, and B using EM equation
-		$rhosum = 0;
-		for($i=0;$i<$num;++$i){
-		    #calc 1/(1+(x-mu)^2/del^2)
-		    $rho[$i] = ($i-$mu)/$del;
-		    $rho[$i] = $rho[$i]*$rho[$i];
-		    $rho[$i] = 1.0/(1.0+$rho[$i]);
-		    $rhosum += $rho[$i];
-		}
-		
-		$bnew = 0;
-		for($i=0;$i<$num;++$i){
-		    $bnew += $in[$i]*$b/($b+$A*$rho[$i]);
-		}
-		$bnew /= $num;
-		
-		$Anew = 0;
-		for($i=0;$i<$num;++$i){
-		    $Anew += $in[$i]*$A*$rho[$i]/($b+$A*$rho[$i]);
-		}
-		$Anew /= $rhosum;
-		
-		#Get the new mu using binary search
-		$curmin = 40;
-		$curmax = 60;
-		while($curmax-$curmin > 0.01){
-		    $curmu = ($curmin+$curmax)/2;
-		    $deriv = 0;
-		    for($i=0;$i<$num;++$i){
-			$thisrho = ($i-$curmu)/$del;
-			$thisrho = $thisrho*$thisrho;
-			$thisrho = 1.0/(1.0+$thisrho);
-			$deriv += ($i-$mu)*$thisrho*$thisrho*(-1.0+$in[$i]/($bnew+$Anew*$thisrho));
-		    }
-		    if($deriv>0){
-			$curmin = $curmu;
-		    }
-		    else{
-			$curmax = $curmu;
-		    }
-		}
-		$munew = ($curmax+$curmin)/2;
-		
-		#Get new delta (width of Cauchy peak) using binary search
-		$deltamax = 12.0;
-		$deltamin = 3.0;
-		while($deltamax-$deltamin > 0.01){
-		    $curdel = ($deltamax+$deltamin)/2.0;
-		    $deriv = 0;
-		    for($i=0;$i<$num;++$i){
-			$thisrho = ($i-$munew)/$curdel;
-			$thisrho = $thisrho*$thisrho;
-			$thisrho = 1.0/(1.0+$thisrho);
-			$cur = $thisrho*(1.0-$thisrho)*(-1.0 + $in[$i]/($bnew+$Anew*$thisrho));
-			$deriv += $cur;
-		    }
-		    if($deriv > 0){
-			$deltamin = $curdel;
-		    }
-		    else{
-			$deltamax = $curdel;
-		    }
-		}
-		$deltanew = $curdel;
-		
-		$diff = 0;
-		$diff += abs($Anew-$A)/($Anew+$A);
-		$diff += abs($bnew-$b)/($b+$bnew);
-		$diff += abs($munew-$mu)/($munew+$mu);
-		$diff += abs($deltanew-$del)/($deltanew+$del);
-		
-		$b = $bnew;
-		$A = $Anew;
-		$mu = $munew;
-		$del = $deltanew;
+	    else{
+		$b = -1;
+		$A = -1;
 	    }
 	    #first fluorescence
 	    if($channel == 1){
 		#Record stats on this frame.	
-	    
+		
 		#Stats we are going to print:
 		#Current frame
 		#top and bottom pixels of box
