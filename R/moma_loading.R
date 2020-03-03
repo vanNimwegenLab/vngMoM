@@ -85,7 +85,7 @@ parse_frames_stats <- function(.path) {
     .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
       flines[.] %>% paste(collapse='\n') # concat lines
     .con <- textConnection(.str)
-    .df <- utils::read.table(.con, comment.char="", header=FALSE) %>% stats::setNames(.colnames)
+    .df <- utils::read.table(.con, comment.char="", header=FALSE, sep="\t", col.names=.colnames)
     close(.con) # close text connection
     .info <- flines[id_lines[.i-1]] %>% # extract line
       strsplit('[ \t]') %>% .[[1]] %>%     # split to vector

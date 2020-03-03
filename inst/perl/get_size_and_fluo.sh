@@ -4,7 +4,7 @@
 #SBATCH -o slogs/$JOB_NAME.o$JOB_ID
 #SBATCH -e slogs/$JOB_NAME.e$JOB_ID
 
-# syntax: get_size_and_fluo_basic.sh ./path/to/get_size_and_fluo_basic.pl ./path/to/input ./path/to/output
+# syntax: get_size_and_fluo.sh ./path/to/get_size_and_fluo_basic.pl ./path/to/input ./path/to/output
 
 INPUT=$(readlink -f $2)
 INPUT_FILENAME=$(basename "$INPUT")
