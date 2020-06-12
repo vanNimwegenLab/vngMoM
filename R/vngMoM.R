@@ -20,26 +20,6 @@ globalVariables(c("covar"))
   invisible()
 }
 
-cluster_assign_obj <- function(.cl, ...) {
-  .xs <- list(...)
-  .ns <- as.character(eval(substitute(alist(...))))
-  for (.i in 1:length(.xs)) {
-    stopifnot(exists(.ns[[.i]]))
-    .cl <- multidplyr::cluster_assign_value(.cl, .ns[[.i]], .xs[[.i]])
-  }
-  return(.cl)
-}
-
-cluster_assign_func <- function(.cl, ...) {
-  .fs <- list(...)
-  .ns <- as.character(eval(substitute(alist(...))))
-  for (.i in 1:length(.fs)) {
-    stopifnot(is.function(.fs[[.i]]))
-    .cl <- multidplyr::cluster_assign_value(.cl, .ns[[.i]], .fs[[.i]])
-  }
-  return(.cl)
-}
-
 # general convenience functions ####
 find.files <- function(.path, .name="", .pattern="", .mindepth=NULL, .maxdepth=NULL, .follow_symlinks=FALSE) {
 # find.files is a minimalist wrapper around bash's `find` to be used as a faster alternative to list.files
@@ -58,19 +38,6 @@ between_or <- function(.x, .a, .b) {
   lapply(seq(length(.a)), function(.i) dplyr::between(.x, .a[.i], .b[.i])) %>%
     do.call(cbind, .) %>%
     apply(1, any)
-}
-
-slice_groups <- function(dt,v) {
-  # adapted from https://github.com/tidyverse/dplyr/issues/1331#issue-101839062
-  # could be modernized using nest and unnest from tidyr
-  stopifnot('data.frame' %in% class(dt))
-  stopifnot(v>0, (v%%1)==0)
-  # if (n_groups(dt) >= 2) warning('Only 1 group to slice')
-  # get the grouping variables
-  groups <- dt %>% dplyr::select %>% dplyr::distinct %>% 
-    dplyr::ungroup %>% dplyr::slice(v)
-  #subset our original data
-  dplyr::semi_join(dt, groups)
 }
 
 value_occurence_index <- function(.m) {
