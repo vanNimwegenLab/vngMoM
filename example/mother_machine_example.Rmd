@@ -7,23 +7,36 @@ output: html_document
 Setup the working environment:
 
 ```{r settings}
-# define global settings for knitr
-knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE) # , include=FALSE
-
-# set working environment (load all shared R scripts)
+# SET ENVIRONMENT
 setwd("example") # required for `here` to start in the right sub-directory (for this example only)
-mylibs <- c('here', 'tidyverse', 'tools', 'RcppArmadillo', 'ccaPP', 'vngMoM', 'ggCustomTJ')
-invisible( suppressPackageStartupMessages( # don't use %>% before loading dplyr
-  lapply(mylibs, library, character.only=TRUE) ))
+
+# install.packages(c('remotes', 'here', 'tidyverse', 'RcppArmadillo', 'svglite'))
+# remotes::install_github(c('julou/ggCustomTJ', 'hadley/multidplyr'))
+# remotes::install_github('vanNimwegenLab/vngMoM', auth_token='xxx')
+suppressPackageStartupMessages({
+  library(here)
+  library(tidyverse)
+  library(cowplot)
+  library(RcppArmadillo)
+  library(vngMoM)
+  library(ggCustomTJ)
+})
+
+# set a parallel environment to run multidplyr (ALL packages explicitely loaded before will be loaded too)
+library(multidplyr)
+mycluster <- min(30, parallel::detectCores()-1) %>%  # do not use more than 30 cores
+  new_cluster(.options = callr::r_session_options(user_profile = FALSE)) %>% # disable user profile to avoid endless startup with `renv`
+  cluster_library( # load currently loaded packages on each core (but multidplyr)
+    sessionInfo()$otherPkgs %>% names() %>% setdiff("multidplyr")
+  )
+
+# Packages loaded from now on won't be attached to the multidplyr cluster
 library(svglite)
 
 dir.create(here("slogs"), showWarnings=FALSE) # create a directory to store logs from the queue
 
-# set a parallel environment to run multidplyr
-library(multidplyr)
-mycluster <- min(30, parallel::detectCores()-1) %>%  # do not use more than 30 cores
-  new_cluster(.options = callr::r_session_options(user_profile = FALSE)) %>% # disable user profile to avoid endless startup with `renv`
-  cluster_library(mylibs)  # load libraries on each core
+# define global settings for knitr
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE) # , include=FALSE
 
 ```
 
