@@ -21,6 +21,8 @@ globalVariables(c("covar"))
 }
 
 # general convenience functions ####
+# file_path_sans_ext <- tools::file_path_sans_ext
+
 find.files <- function(.path, .name="", .pattern="", .mindepth=NULL, .maxdepth=NULL, .follow_symlinks=FALSE) {
 # find.files is a minimalist wrapper around bash's `find` to be used as a faster alternative to list.files
 # NB: setting .follow_symlinks=TRUE can hugely slow down the function

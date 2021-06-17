@@ -82,21 +82,27 @@ parse_frames_stats <- function(.path) {
     #                       flines[.] %>% paste(collapse='\n') %>%           # concat lines
     #                       textConnection %>% read.table(comment.char="", header=FALSE) %>% # read table
     #                       stats::setNames(.colnames)
-    .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
-      flines[.] %>% paste(collapse='\n') # concat lines
-    .con <- textConnection(.str)
-    .df <- utils::read.table(.con, comment.char="", header=FALSE, sep="\t", col.names=.colnames)
-    close(.con) # close text connection
+
     .info <- flines[id_lines[.i-1]] %>% # extract line
       strsplit('[ \t]') %>% .[[1]] %>%     # split to vector
       # strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
       .[-1] %>% t %>% data.frame(stringsAsFactors=FALSE) %>%    # convert to df
       stats::setNames(.fieldnames[-1]) %>%
       dplyr::mutate(cell_ID=as.numeric(cell_ID), parent_ID=as.numeric(parent_ID), 
-             first_frame=as.numeric(first_frame), last_frame=as.numeric(last_frame))
-    cbind(.info, .df)
+                    first_frame=as.numeric(first_frame), last_frame=as.numeric(last_frame))
+    
+    .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
+      flines[.] %>% paste(collapse='\n') # concat lines
+    if (str_detect(.str, "^\\d+$")) 
+      return(.info)
+    else {
+      .con <- textConnection(.str)
+      .df <- utils::read.table(.con, comment.char="", header=FALSE, sep="\t", col.names=.colnames)
+      close(.con) # close text connection
+      cbind(.info, .df)
+    }
   }) %>% 
-    do.call(rbind, .) %>% 
+    dplyr::bind_rows() %>% 
     dplyr::rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
     dplyr::mutate(cid=compute_genealogy(id, parent_id, daughter_type),
                   fluo_background=if (exists('fluo_bg_ch_1', where=.)) fluo_bg_ch_1 else fluo_background,

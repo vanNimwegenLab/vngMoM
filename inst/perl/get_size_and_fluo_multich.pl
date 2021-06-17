@@ -326,7 +326,8 @@ while(<F>){
 	    $florheight = $1;
 	}
 	else{
-	    die "cannot get height from: $line\n";
+	    $florheight = NaN;
+	    # later version of legacy MoMA do not export cell length as the bounding box coordinates are used instead.
 	}
 
 	if($line =~ /pixel\_limits\=\[(\d+)\,(\d+)\]/){
