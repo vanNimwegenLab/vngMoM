@@ -355,7 +355,7 @@ while(<F>){
 	}
     }
     #line with fluorescence column intensities
-    elsif($line =~ /ch\=(\d+)\;\s+output\=COLUMN\_INTENSITIES\;\s+([\-\d\.\;\s]+)/){
+    elsif($line =~ /ch\=(\d+)\;\s+output\=COLUMN\_INTENSITIES\;\s+([\-\d\.Na\;\s]+)/){
 	$channel = $1;
 	$vals = $2;
 	$vals =~ s/\;/ /g;
@@ -371,7 +371,7 @@ while(<F>){
 	    }
 	    $num = @in;
 
-	    if($num >= 10){
+	    if($tmp[0] ne 'NaN' && $num >= 10){
 		#get maximum and minimum
 		$max = -10000000;
 		$min = 100000000;
