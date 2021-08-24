@@ -28,7 +28,7 @@ find.files <- function(.path, .name="", .pattern="", .mindepth=NULL, .maxdepth=N
 # NB: setting .follow_symlinks=TRUE can hugely slow down the function
   .fargs <- .path
   if (.follow_symlinks) .fargs <- c("-L", .fargs)
-  if (.name!="") .fargs <- c(.fargs, paste("-name", .name))
+  if (.name!="") .fargs <- c(.fargs, paste0("-name \'", .name, "\'"))  # note: escape the pattern string with ' to avoid shell globbing
   if (.pattern!="") .fargs <- c(.fargs, "-regextype posix-basic", paste("-regex", .pattern))
   if (!is.null(.mindepth)) .fargs <- c(.fargs, paste("-mindepth", .mindepth))
   if (!is.null(.maxdepth)) .fargs <- c(.fargs, paste("-maxdepth", .maxdepth))

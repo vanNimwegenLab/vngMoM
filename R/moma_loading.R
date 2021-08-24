@@ -94,7 +94,7 @@ parse_frames_stats <- function(.path) {
     
     .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
       flines[.] %>% paste(collapse='\n') # concat lines
-    if (str_detect(.str, "^\\d+$")) 
+    if (stringr::str_detect(.str, "^\\d+$")) 
       return(.info)
     else {
       .con <- textConnection(.str)
