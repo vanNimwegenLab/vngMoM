@@ -44,7 +44,10 @@ myconditions <-
 
 myframes <-
   myfiles %>% 
-  mutate(data=map(path, parse_deepmoma_frames)) %>% 
+  mutate(data=map(path, parse_deepmoma_frames)) %>%
+  # alternative to read non-standard csv files
+  # mutate(data=map(path, ~parse_deepmoma_frames(
+  #   ., .reader=(function(.p, ...) readr::read_delim(.p, delim=",", ...)) ))) %>% 
   unnest(data) %>% 
   mutate(regrow=NULL) %>%  # get rid of a column added manually in some input files
   rename_deepmoma_vars() %>% 

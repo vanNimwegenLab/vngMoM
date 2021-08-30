@@ -42,8 +42,8 @@ parse_yaml_conditions <- function(.path) {
     identity()
 }
 
-parse_deepmoma_frames <- function(.path) {
-  readr::read_csv(.path, skip=2, #lazy=FALSE,
+parse_deepmoma_frames <- function(.path, .reader=readr::read_csv) {
+  .reader(.path, skip=2, #lazy=FALSE,
            col_types = readr::cols( # specifying col types to avoid parsing NaN as chr and to speed up the import
              "lane_ID"=readr::col_character(),
              "genealogy"=readr::col_character(),
