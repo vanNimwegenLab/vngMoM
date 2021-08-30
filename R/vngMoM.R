@@ -1,22 +1,13 @@
 globalVariables(c("covar"))
 
 .onLoad <- function(libname, pkgname) {
-  options("readr.num_columns" = 0) # disable printing when loading data with readr
+  # options("readr.num_columns" = 0) # disable printing when loading data with readr
   
   if (!exists("scale_colour_periodic_brewer", mode="function"))
     scale_colour_periodic_brewer <- function(..., .n=4) 
       ggplot2::scale_colour_manual(..., values = rep(c(RColorBrewer::brewer.pal(9, 'Set1')[1:.n], 'gray42'), 1e4), 
                                    na.value='gray25')
 
-  if (!exists("data2preproc_dir", mode="function"))
-    data2preproc_dir <- function(.f) dirname(.f)
-  if (!exists("data2preproc_file", mode="function"))
-    data2preproc_file <- function(.f)
-      basename(.f) %>% tools::file_path_sans_ext %>% paste0("_preproc.txt")
-  if (!exists("data2preproc", mode="function"))
-    data2preproc <- function(.path)
-      file.path(data2preproc_dir(.path), data2preproc_file(.path))
-  
   invisible()
 }
 
@@ -69,13 +60,8 @@ find_unique_interval <- function(.xs, .mins, .maxs) {
 as_numeric <- function(.x) as.numeric(as.character(.x))
 as_numeric_df <- function(.d) utils::modifyList(.d, lapply(.d, as_numeric))
 
-mycut <- function(.x, ...) {
-  .k <- Hmisc::cut2(.x, ...)
-  .mids <- sapply(stringr::str_match_all(as.character(levels(.k)), "[\\[\\(](.*),(.*)[\\]\\)]"), 
-                 function(.m) {
-                   mean(c(as.numeric(.m[2]), as.numeric(.m[3])))
-                 })
-  .mids[.k]
+compute_pill_vol <- function(.l, .w) {
+  ((.l-.w)*(.w/2)**2 * pi) + 4/3*pi * (.w/2)**3
 }
 
 gm_mean <- function(x, na.rm=TRUE) {

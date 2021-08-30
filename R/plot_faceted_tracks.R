@@ -1,5 +1,5 @@
 # plotting tracks ####
-utils::globalVariables(c(":=", "b_rank", "discard_top", "gfp_nb", "time_sec"))
+utils::globalVariables(c(":=", "b_rank", "discard_top", "gfp_nb", "time_sec", "id", "parent_id"))
 
 plot_faceted_var_tracks <- function(.df, .var_col=gfp_nb, .time_col=time_sec, 
                                     .cell_col=rlang::expr(id), .parent_col=parent_id, .facet_col=b_rank, 

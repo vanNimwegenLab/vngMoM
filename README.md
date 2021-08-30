@@ -3,110 +3,138 @@ title: "vngMoM"
 ---
 
 
-After image acquisition, Mother Machine data are processed using MoMA. Here we describe the analysis of MoMA's output using R, in particular:
-- how to load MoMA data and apply its postprocessing scripts in perl
+After image acquisition, Mother Machine data are processed using deepMoMA. Here we describe the analysis of deepMoMA's output using R, in particular:
+- how to load MoMA data
 - how to concatenate all data analysed in a project in the same dataframe
 - simple examples of data selection and plotting
 
-Most of this R code rely heavily on Hadley Wickham's libraries, including stringr, tidyr, dplyr, multidplyr and ggplot2. Getting started with dplyr and ggplot2 first will definitely help you follow this analysis.
+Most of this R code rely heavily on the `tidyverse` libraries. Getting familiar with those first, e.g. reading [R for data science](https://r4ds.had.co.nz), will definitely help you follow this analysis.
 
-`.` is the project directory. All paths to data files (raw or preprocessed) must be defined locally.
+`.` is the project directory. All paths to data files are defined locally.
 
 
 # Getting started
+
 ## Installation
 
-As long as the Github repo is private, there are two possible ways:
+It should be as simple as running the following: 
 
-1. install a [Private Access Token](https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/). Afterwards, it should be as simple as running the following: 
 ```
-# install.packages('devtools') # only if devtools isn't already installed
-devtools::install_github('vanNimwegenLab/vngMoM', auth_token='paste_your_PAT_here')
+# install.packages('remotes') # only if devtools isn't already installed
+remotes::install_github('vanNimwegenLab/vngMoM')
 ```
 
-2. clone/pull/download the package from github and run `devtools::install_local('.../.../vngMoM')`  
-(you need to edit the path to the directory you downloaded)
+Note that to analyse data obtained from Legacy MoMA, one should use the `v0.1` branch of this package:
+
+```
+remotes::install_github('vanNimwegenLab/vngMoM', "v0.1")
+```
 
 
 ## Contribution
-In case you're granted read-only access to https://github.com/vanNimwegenLab/vngWetLabR repository, the recommend use is the following:
+In case you're granted read-only access to https://github.com/vanNimwegenLab/vngMoM repository, the recommend use is the following:
 
 - fork this repository in your own account (it will be kept private even if you use a free github plan; by the way, you can get 5 private repositories for free at https://education.github.com/discount_requests/new).
-- clone your repository (e.g. https://github.com/myAccount/vngWetLabR) to your local computer:  
-`git clone git@github.com:myAccount/vngWetLabR.git`
-- add https://github.com/vanNimwegenLab/vngWetLabR as a new remote to your local repository, calling it `vng`:  
-`git remote add vng git@github.com:vanNimwegenLab/vngWetLabR.git`
-- you can now pull from the vanNimwegenLab/vngWetLabR repository and push to yours if you want to update it / share new code:  
+- clone your repository (e.g. https://github.com/myAccount/vngMoM) to your local computer:  
+`git clone git@github.com:myAccount/vngMoM.git`
+- add https://github.com/vanNimwegenLab/vngMoM as a new remote to your local repository, calling it `vng`:  
+`git remote add vng git@github.com:vanNimwegenLab/vngMoM.git`
+- you can now pull from the vanNimwegenLab/vngMoM repository and push to yours if you want to update it / share new code:  
 `git pull vng master`  
 `git pull vng dev` (if you want to pull the `dev` branch)  
 `git push origin master` (or `git push` if you're lazy)
-- after pushing your changes to your local repository (using an up-to-date version of vanNimwegenLab/vngWetLabR), you can create a pull request in the github web interface.
+- after pushing your changes to your local repository (using an up-to-date version of vanNimwegenLab/vngMoM), you can create a pull request in the github web interface.
 - (optionnal, and discouraged!) if you want to pull from `vng` and push to `origin` by default, you can change the git config locally:  
 `git config --local branch.master.remote vng` (set `vng` as default remote)  
 `git config --local branch.master.pushremote origin` (override the default push remote)
 
 
 
+# Loading data in R
 
-# Converting MoMA output using postprocessing perl scripts
+## Defining experimental conditions and paths to deepMoMA export files
 
-In a first step, postprocessing perl scripts (producing more precise length and fluorescence estimates) are applied to the following raw output files from MoMA: 
+Since experimental conditions are not recorded in deepMoMA output, they are documented, together with paths to deepMoMA export files, in a YAML file. Each condition is defined as an associative array which is expected to have the following properties:
+
+- `condition` must be a unique string
+- the combination of`medium`, `duration` and `interval` define "steps"; those variables can be lists (of the same length for a given condition) or scalars (value is then recycled)
+- `paths` are lists of strings
+- other custom fields can be added (must be scalar)
+- for a given condition, several `series` can be declared as a list containing paths and other custom fields (see example below). 
+NB: since series are *not* named, (at least one) custom field must be used to distinguish them.
+
+For the rest, any valid YAML syntax should be accepted (mind tabs vs spaces for indentation).
+
+This example defines two "conditions": the first one is specified using the series syntax (with a custom field `antibio`) and has a custom field `strain`; the second one only has a list of (one) replicate specified using `paths` and a custom field `antibio` (for consistency with the first condition).
 
 ```
-./data/date1/ (cond1/cond2/) pos0/pos0GL01.csv
-                                  pos0GL02.csv
-                                  ...
-                                  pos1GL01.csv
-                                  ...
+- condition: AB_before
+  duration: 360
+  interval: 3
+  medium: M9+glucose
+  strain: MG1655_hi2
+  series:
+  - antibio: CIP
+    paths:
+    - ./data/20200922_curated/20200922_CIP_cell_stats
+    - ./data/20201119_curated/20201119_CIP_cell_stats
+  - antibio: CEF
+    paths:
+    - ./data/
+    - ./data/20200922_curated/20200922_CEF_cell_stats
+    - ./data/20201119_curated/20201119_CEF_cell_stats
+
+- condition: AB_2h
+  duration: [360, 6, 960, 120, 960]
+  interval: 3
+  medium: [M9, antibio, M9, antibio, M9]
+  antibio: TMP
+  paths:
+  - ./data/20200922_curated/20200922_TMP_cell_stats
 ```
 
-the resulting "preprocessed" data files are written to the directory of your choice (e.g. `preproc`; the "preprocessing" nature of this step is seen from this R analysis perspective, not from the MoMA perspective where it corresponds to "postprocessing"):
+This is parsed to the following dataframe by `parse_yaml_conditions()`, with one row per condition and step:
 
 ```
-./preproc/date1/ (cond1/cond2/) pos0/pos0GL01_frames.txt
-                                     pos0GL02_frames.txt
-                                     ...
-                                     pos1GL01_frames.txt
-                                     ...
+# A tibble: 7 × 8
+  condition duration interval medium     strain     antibio paths     step_idx
+  <chr>        <int>    <int> <chr>      <chr>      <chr>   <list>       <int>
+1 AB_before      360        3 M9+glucose MG1655_hi2 CIP     <chr [2]>        1
+2 AB_before      360        3 M9+glucose MG1655_hi2 CEF     <chr [3]>        1
+3 AB_2h          360        3 M9         NA         TMP     <chr [1]>        1
+4 AB_2h            6        3 antibio    NA         TMP     <chr [1]>        2
+5 AB_2h          960        3 M9         NA         TMP     <chr [1]>        3
+6 AB_2h          120        3 antibio    NA         TMP     <chr [1]>        4
+7 AB_2h          960        3 M9         NA         TMP     <chr [1]>        5
 ```
 
-> NB: The directory structure of the raw data directory can be replicated in the preproc directory. This is controlled by the function `data2preproc`: it converts raw data path to preproc path. If you want cache files to be stored along with raw data, simply use `identity`. For the sake of flexibility and readability, `data2preproc` is split into two subfunctions `data2preproc_dir` and `data2preproc_file` which handle the name conversion of the directory and file respectively.
+Note that it is possible to change the order of the fields in the YAML file, e.g. to document experiment in a more replicate-centered way.
 
-`process_moma_data()` handles this preprocessing step (using the computing power of the BC2 cluster) and returns a vector containing the paths to all preprocessed files. For any raw data file whose corresponding preprocessed file is not found, the preprocessing is started using the BC2 queue and the function will return an error message; the user must run this function once more after all jobs are executed.
-Alternatively, if all preprocessed files are found, the function returns a vector containing the paths to all preprocessed files. This approach uses the preprocessed files as cache when an analysis is rerun later by the user; the analysis can be rerun from scratch by setting `force=TRUE`.
 
-`parse_frames_stats()` parses one preprocessed file to an R dataframe. It is used over the output of `process_moma_data()` to load them all and concatenate the dataframes. The result is a large dataframe `myframes` gathering all data considered in the analysis (with one row per cell per frame and one column per variable).
+## How is the information organised in dataframes
 
-`myframes` is designed to be enriched with new columns during the analysis; in particular dummy variables are helpful to distinguish the setup of the data that matches a given driteria. `myframes` has the following variables (and more!) by default
+The data loading step produces three dataframes:
+
+- myfiles has one row per data file, and keeps track of the corresponding condition
+- myconditions has one row per condition and frame - it features all info related to time and environmental conditions, and is left-joined to myframes (by path and frame) in order to propagate those.
+- myframes gathers all observations measured by deepMoMA with one row per cell and per frame.
+
+`myframes` has the following variables (and more!) by default
 
 - `id`, `gl`: the ID and growth lane of the given cell.
 - `path`: the path of the CSV file containing the information of the given cell.
 - `time\_sec`: time in seconds when the measurement has been done.
 - `length\_um` length of the cell in μm at the time of the measurement.
-- `end\_type`: end of a cell and it can be division (*div*), end of the measurement (*eod`) or exit.
+- `end\_type`: end of a cell and it can be division (*div*), end of the measurement (*eod`), "pruned" or exit.
 - `start\_time` and `end\_time`: time in seconds when the cell was born and died.
-- `b\_rank`: cell rank counted from the channel closed end ("b" stands for "bottom")
+- `cell_rank`: cell rank counted from the channel closed end
 
 
-# Computing additional biologically relevant variables
-
-## Appending experimental conditions
-
-By default, the naming of MoMA files don't encode details of the conditions used in each experiment. For this purpose, we define a dataframe (`myconditions`) that describes the details of a given condition (that might have been used over several replicate experiments) and where corresponding data are located (so as to map each experiment to a given condition).
-
-This information is appended to `myframes` and parsed to identify the following variables for each row: in which medium the cells currently are (`medium`), how long has elapsed since the last medium switch (`m_start`), and how many time they have seen this medium already (`m_cycle`).
-
-With this syntax, all data (several conditions and controls) can be loaded in the same step and then used at will for downstream analysis.
-
-
-## Appending dummy variables
+`myframes` is designed to be enriched with new columns during the analysis; in particular dummy variables are helpful to filter the subset of the data that matches a given criteria. 
 
 - `discard\_start`: when acquiring fluorescence, it is likely that cells experience some phototoxicity. In the case of the glucose/lactose switch, we identified that the doubling time of cells increase during the first 2 hours. Hence `discard\_start==TRUE` for the first 2 hours (aka "preexperiment step").
 
-- `discard\_top`: because phase contrast ilumination is very uneven next to the growth channel exit, it is important to exclude cells once they have reached a minimum distnace to the exit. All later frames of the same cell as well as its progeny is excluded. \
-NB: during the preexperiment, measurements are not used and bottom cells are likely to touch the exit threshold because they progressively enter the channel. Hence we don't label any cell as `discard\_top==TRUE` since it would be likely to exclude all the cells in the growth channel (as being the progeny of the bottom cell which touched the threshold once).
-
-`filter(myframes, !discard_start, !discard_top)` should be used in any case to select valid observations.
+`filter(myframes, !discard_start)` should be used in any case to select valid observations.
 
 
 ## Estimating the GFP fluorescence
@@ -116,13 +144,13 @@ NB: during the preexperiment, measurements are not used and bottom cells are lik
 - `gfp\_nb`: number of GFP molecules i.e. the GFP fluorescence rescaled with the parameter `fp\_per\_dn`, discussed later.
 
 
-# Data exploration
+# Rudimentary data exploration
 
 Once data are stored in the dataframe `myframes`, this tibble supports all the manipulations allowed by the dplyr library. Here are a few basic examples:
 
 1. We can select cells satisfying specific requirements with the function `filter`. For example, if we want to isolate usable cells (not in the pre-experiment step, not excluded at the top of the channel), from the growth channel #14, and from a given condition (e.g. `test`), we can write
 ```
-empty <- filter(myframes, !discard_top, !discard_start, condition=='test', gl==14)
+empty <- filter(myframes, !discard_start, condition=='test', gl==14)
 ```
 
 2. If we want to stratify the cell by medium and date we can write
@@ -140,7 +168,7 @@ summarize(stratified, mu=mean(gfp_nb))
 4. Finally we can combine different commands with the pipe operator %>%. Let's suppose we want to find the mean and variance of the number of gfp molecules discarding cells at the beginning of the experiment or that exited and stratified by medium and date. We can write
 ```
 myframes %>% 
-  filter(!discard_top, !discard_start) %>% 
+  filter(!discard_start) %>% 
   group_by(medium, date) %>% 
   summarize(mu=mean(gfp_nb), sd=sd(gfp_nb))
 ```

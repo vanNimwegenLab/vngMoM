@@ -1,0 +1,74 @@
+---
+title: "My custom data analysis"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+mycells <-
+  myframes %>% 
+  group_by(condition, antibio, date, pos, gl, id) %>% 
+  filter(time_sec < 6 * 3600) %>% 
+  filter(time_start > 0, n() > 3) %>% 
+  # filter(date == "20200922", pos == 22, gl == 19, id == 48) %>% 
+  # select(time_sec, length_um)
+  nest() %>% 
+  mutate(
+    n=map_dbl(data, nrow),
+    end_type=map_chr(data, ~unique(.$end_type)),
+    mod=map(data, ~lm(log(length_um)~time_sec, data=.))
+  )
+
+
+mycells %>% 
+  # filter(n > 10) %>% 
+  filter(end_type=="div") %>%
+  mutate(
+    grate=map_dbl(mod, ~coef(.)[2]),
+    grate_se=map_dbl(mod, ~summary(.)$coefficients[2,2]),
+    r2=map_dbl(mod, ~summary(.)$r.squared),
+  ) %>% 
+  ggplot(aes(grate/log(2) * 3600)) +
+  stat_ecdf(aes(col=antibio, group=interaction(date, antibio))) +
+  coord_cartesian(xlim=c(0, 2)) +
+  labs(x="growth rate (dbl/h)", y="cumulative probability") +
+  NULL
+  
+mycells %>% 
+  filter(end_type=="div") %>% 
+  mutate(
+    grate=map_dbl(mod, ~coef(.)[2]),
+    grate_se=map_dbl(mod, ~summary(.)$coefficients[2,2]),
+    r2=map_dbl(mod, ~summary(.)$r.squared),
+  ) %>% 
+  ggplot(aes(grate/log(2) * 3600)) +
+  stat_ecdf(aes(col=date, group=interaction(date, antibio))) +
+  coord_cartesian(xlim=c(0, 2)) +
+  labs(x="growth rate (dbl/h)", y="cumulative probability") +
+  NULL
+  
+mycells %>% 
+  # filter(n > 10) %>% 
+  filter(end_type=="div") %>%
+  mutate(
+    r2=map_dbl(mod, ~summary(.)$r.squared),
+  ) %>% 
+  ggplot(aes(r2)) +
+  stat_ecdf(aes(col=date, group=interaction(date, antibio))) +
+  coord_cartesian(xlim=c(0.9, 1)) +
+  labs(x="Pearson correlation r2", y="cumulative probability") +
+  NULL
+
+mycells %>% 
+  # filter(n > 10) %>% 
+  filter(end_type=="div") %>%
+  ggplot(aes(n)) +
+  stat_ecdf(aes(col=date, group=interaction(date, antibio))) +
+  labs(y="cumulative probability") +
+  NULL
+
+
+```
+

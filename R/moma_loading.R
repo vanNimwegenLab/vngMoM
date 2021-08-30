@@ -1,121 +1,83 @@
 # MoMA loading ####
-utils::globalVariables(c(".", "msg", "name", "n_jobs", "state",
-                         "n",
-                         "cell_ID", "parent_ID", "first_frame", "last_frame", "type_of_end", "daughter_type",
-                         "id", "parent_id", "end_type", "cid", "fluo_background", "fluo_amplitude", "fluo_bg_ch_1", "fluo_ampl_ch_1",
-                         "ndgt", "end_type_moma"))
+utils::globalVariables(c(".", "where", # see https://github.com/r-lib/tidyselect/issues/201
+                         "series", "medium", "duration", "interval", "paths", "condition", "step_idx"))
 
-process_moma_data <- function(.x, .data2preproc, .scripts_path=system.file("perl", ".", package="vngMoM"), .force=FALSE, .skip=FALSE,
-                              .frames_sh_script="get_size_and_fluo.sh", .frames_pl_script="get_size_and_fluo_basic.pl",
-                              .qsub_name="MM_pl" # must be shorter than 10 characters
-) { 
-  # browser()
-  # check whether some files need to be preprocessed
-  .out <- .data2preproc(.x)
-  .preprocessed <- file.exists(.out)
-  if (all(.preprocessed) && !.force) {
-    return(.out) 
-  } else if (.skip) {
-    # return already preprocessed files
-    return(ifelse(.preprocessed, .out, NA)) 
-  } else {
-    # call qsub
-    lapply(.x[ which(.force | !.preprocessed) ],
-           function(.f) system(sprintf("sbatch --job-name=%s %s %s %s %s", 
-                                       .qsub_name, file.path(.scripts_path, .frames_sh_script), 
-                                       file.path(.scripts_path, .frames_pl_script), .f, .data2preproc(.f)))) 
-    stop("Some files required preprocessing on the cluster. Once they're processed, run the same command again\n",
-         sprintf("Hint: use `process_state(\"%s\")` to check if the processing is still running...", .qsub_name),
-         call.=FALSE)
-  }
+parse_yaml_conditions <- function(.path) {
+  yaml::read_yaml(.path) %>% 
+    # check `condition` values are unique and of length 1
+    # note: this is easier to do before "unnesting" series
+    (function(.l) {
+      if (!identical(1, unique(purrr::map_dbl(.l, ~length(.$condition))))) stop("All values of `condition` must be scalar.") 
+      if (length(unique(purrr::map_chr(.l, ~.$condition))) != length(.l)) stop("Values of `condition` must be unique.")
+      return(.l) 
+    }) %>% 
+    # convert list to a tibble with list-columns and unnest `series` if needed
+    purrr::map_dfr(function(.x) {
+      .df <- purrr::map(.x, ~{ if (is.list(.)) . else list(.)}) %>% dplyr::as_tibble() # "nest" scalar values to list to allow bind_rows()
+      if ('series' %in% names(.df)) .df <- dplyr::mutate(
+        .df, series=purrr::map(series, function(.l) {purrr::map(.l, ~list(.)) %>% dplyr::as_tibble()}) ) %>% tidyr::unnest(series)
+      return(.df)
+    }) %>% 
+    # check that `medium`, `duration` and `interval` have same length, and add step index
+    dplyr::mutate(step_idx = purrr::pmap(list(medium, duration, interval), ~{ #browser()
+      .ls <- unique(c(length(..1), length(..2), length(..3)))
+      if (length(setdiff(.ls, 1)) > 1) stop("`medium`, `duration` and `interval` have same length (or be scalar values).")
+      return(1:max(.ls))
+    })) %>% 
+    (function(.df) {
+      # check that `paths` exist (warning) and are unique (error)
+      .p <- dplyr::pull(.df, paths) %>% unlist()
+      if (length(.p) > length(unique(.p))) stop("Values of `paths` must be unique.")
+      purrr::walk(.p[!fs::dir_exists(.p)], ~warning("Directory does not exist: ", .))
+      # check that other columns have scalar values
+      setdiff(names(.df), c("condition", "medium", "duration", "interval", "step_idx", "paths")) %>% 
+        purrr::walk(function(.x) if (max( dplyr::pull(.df, .x) %>% purrr::map_dbl(length) ) > 1) stop("Values of `", .x,"` must be scalar") )
+      return(.df)
+    }) %>% 
+    tidyr::unnest(condition) %>% 
+    tidyr::unnest(c(medium, duration, interval, step_idx)) %>% 
+    tidyr::unnest(where(is.list) & !dplyr::all_of("paths"), keep_empty=TRUE) %>%  # unnest all remaining columns but `paths`
+    # select(-paths) %>% 
+    # select(condition, treatment, paths) %>% unnest(paths) %>% 
+    identity()
 }
 
-squeue <- function(.user=Sys.info()[['user']], .args="", .intern=FALSE)
-  paste("squeue -u", .user, .args) %>% system(.intern)
-
-sacct <- function(.jobid, .args="")
-  paste("sacct -j", .jobid, .args) %>% system
-
-process_state <- function(.qsub_name="MM_pl") {
-  .qs <- squeue(.intern=TRUE) 
-  
-  if (length(.qs) == 1) {
-    return("All jobs have been processed.")
-  } else {
-    .qsn <- .qs[1] %>% stringr::str_to_lower() %>% 
-      stringr::str_split("\\s+") %>% 
-      (function(.x) .x[[1]][-length(.x[[1]])])
-    paste(.qs[-1], collapse='\n') %>% 
-      readr::read_fwf(readr::fwf_widths(c(10, 20, 20, 10, 10, 10, 10, 10, 20), col_names=.qsn) ) %>% 
-      dplyr::filter(name==.qsub_name) %>%
-      dplyr::group_by(state) %>% dplyr::summarise(n_jobs=n()) %>% 
-      dplyr::rowwise() %>% 
-      dplyr::mutate(msg=sprintf('%d job(s) in state %s', n_jobs, state)) %>% 
-      .[['msg']] %>% paste(collapse='\n') %>% 
-      ifelse(nchar(.)==0, 'No job currently being processed.', .)
-  }
+parse_deepmoma_frames <- function(.path) {
+  readr::read_csv(.path, skip=2, #lazy=FALSE,
+           col_types = readr::cols( # specifying col types to avoid parsing NaN as chr and to speed up the import
+             "lane_ID"=readr::col_character(),
+             "genealogy"=readr::col_character(),
+             "type_of_end"=readr::col_character(),
+             .default=readr::col_double(), # if NaN raise problems, install last/dev version of vroom: https://github.com/tidyverse/readr/issues/1277#issuecomment-901297437
+           )) %>% 
+    tidyr::fill("type_of_end", .direction="up")
 }
 
-parse_frames_stats <- function(.path) {
-  if (!file.exists(.path)) stop(sprintf("input path is not valid (%s)", .path))
-  flines <- readLines(.path)
-  # browser()
-  
-  # find column names for stats
-  .fieldnames <- stringr::str_split(flines[1], '[ \t]+')[[1]] %>% sub("#", "", .) %>%
-    gsub(" ", "", .) %>%
-    gsub("-", "_", .) %>%
-    gsub("\\(", "_", .) %>%
-    gsub("\\)", "", .)
-  .colnames <- stringr::str_split(flines[2], '[ \t]+')[[1]] %>% sub("#", "", .) %>%
-    gsub(" ", "", .) %>%
-    gsub("-", "_", .) %>%
-    gsub("\\(", "_", .) %>%
-    gsub("\\)", "", .) %>%
-    gsub("botom", "bottom", .)
-  
-  # parse all cells
-  id_lines <- grep("^>CELL", flines)
-  id_lines <- c(id_lines, length(flines)+1) # add the last line index (+1 since readLines skips the last empty line)
-  lapply(seq_along(id_lines)[-1], function(.i) {
-    # browser()
-    #                     .df <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
-    #                       flines[.] %>% paste(collapse='\n') %>%           # concat lines
-    #                       textConnection %>% read.table(comment.char="", header=FALSE) %>% # read table
-    #                       stats::setNames(.colnames)
-
-    .info <- flines[id_lines[.i-1]] %>% # extract line
-      strsplit('[ \t]') %>% .[[1]] %>%     # split to vector
-      # strsplit('[ \t]+') %>% .[[1]] %>%     # split to vector
-      .[-1] %>% t %>% data.frame(stringsAsFactors=FALSE) %>%    # convert to df
-      stats::setNames(.fieldnames[-1]) %>%
-      dplyr::mutate(cell_ID=as.numeric(cell_ID), parent_ID=as.numeric(parent_ID), 
-                    first_frame=as.numeric(first_frame), last_frame=as.numeric(last_frame))
-    
-    .str <- (id_lines[.i-1] + 1):(id_lines[.i] - 1) %>% # retrieve lines indices
-      flines[.] %>% paste(collapse='\n') # concat lines
-    if (stringr::str_detect(.str, "^\\d+$")) 
-      return(.info)
-    else {
-      .con <- textConnection(.str)
-      .df <- utils::read.table(.con, comment.char="", header=FALSE, sep="\t", col.names=.colnames)
-      close(.con) # close text connection
-      cbind(.info, .df)
-    }
-  }) %>% 
-    dplyr::bind_rows() %>% 
-    dplyr::rename(id=cell_ID, parent_id=parent_ID, end_type=type_of_end) %>%
-    dplyr::mutate(cid=compute_genealogy(id, parent_id, daughter_type),
-                  fluo_background=if (exists('fluo_bg_ch_1', where=.)) fluo_bg_ch_1 else fluo_background,
-                  fluo_amplitude=if (exists('fluo_ampl_ch_1', where=.)) fluo_ampl_ch_1 else fluo_amplitude ) %>% 
-    # fix end_type for pruned cells
-    dplyr::mutate(ndgt=compute_daughters_numbers(cid)) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(end_type_moma=end_type,
-           end_type=ifelse(ndgt==0, "lost", "weird"),
-           end_type=ifelse(ndgt==2, "div", end_type))
+rename_deepmoma_vars <- function(.df) {
+  .df %>% 
+    dplyr::rename(
+      "id"="cell_ID", #to remove spaces from column names
+      "end_type"="type_of_end",
+      "parent_id"="parent_ID",
+      "vertical_bottom"="bbox_bottom px",
+      "vertical_top"="bbox_top px",
+      "center_x_px"="center_x px",
+      "center_y_px"="center_y px",
+      "width_px"="width px",
+      "length_px"="length px",
+      "tilt_radian"="tilt rad",
+      "area_px2"="area px^2",
+      "bg_area_px2"="bgmask_area px^2",
+    ) %>% 
+    dplyr::rename_with(
+      function(.name) stringr::str_replace(.name, "(.*)_ch_(\\d+)", "\\1_ch\\2"),
+      dplyr::matches("_ch_\\d+") ) %>% 
+    dplyr::rename_with(
+      function(.name) stringr::str_replace(.name, "fluo_cellmask_(\\d+)", "fluo_cellmask_ch\\1"),
+      dplyr::matches("fluo_cellmask_\\d+") ) %>% 
+    tidyr::extract("path", c("date"), ".*(20\\d{6})_.*", remove=FALSE, convert=FALSE) %>%
+    tidyr::extract("lane_ID", c("pos", "gl"), ".*[Pp]os_(\\d+)_GL_(\\d+)", remove=TRUE, convert=TRUE)
 }
-
 
 which_touch_exit <- function(.h, .hmin_cutoff) {
   # browser()

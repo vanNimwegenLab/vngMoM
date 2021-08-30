@@ -1,0 +1,34 @@
+# must contain a list of conditions (associative arrays) with following properties:
+# - `condition` must be a unique string
+# - `medium`, `duration`, `interval` must be lists 
+# (of the same length for a given condition) or scalars (value is recycled)
+# - `paths` are lists of strings
+# - other custom fields can be added (must be scalar!)
+# - for a given concdition, several `series` can be declared as a list 
+# containing paths and other custom fields (see below). NB: sicne series are 
+# *not* named, (at least one) custom field must be used to distinguish them.
+# For the rest, any valid YAML syntax should be accepted (mind tabs vs spaces).
+
+- condition: AB_before
+  duration: 360
+  interval: 3
+  medium: M9+glucose
+  strain: MG1655_hi2
+  series:
+  - antibio: CIP
+    paths:
+    - ./data/20200922_curated/20200922_CIP_cell_stats
+    - ./data/20201119_curated/20201119_CIP_cell_stats
+  - antibio: CEF
+    paths:
+    - ./data/
+    - ./data/20200922_curated/20200922_CEF_cell_stats
+    - ./data/20201119_curated/20201119_CEF_cell_stats
+
+- condition: AB_2h
+  duration: [360, 6, 960, 120, 960]
+  interval: 3
+  medium: [M9, antibio, M9, antibio, M9]
+  antibio: TMP
+  paths:
+  - ./data/20200922_curated/20200922_TMP_cell_stats

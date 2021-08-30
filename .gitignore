@@ -3,5 +3,4 @@
 .RData
 .Ruserdata
 example/plots
-example/preproc
-example/slogs
+example/*.html
