@@ -21,7 +21,6 @@
     - ./data/20201119_curated/20201119_CIP_cell_stats
   - antibio: CEF
     paths:
-    - ./data/
     - ./data/20200922_curated/20200922_CEF_cell_stats
     - ./data/20201119_curated/20201119_CEF_cell_stats
 

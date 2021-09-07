@@ -19,8 +19,10 @@ dl <- 0.065 # µm/pixel (pixel size)
 # find raw data files
 myfiles <- 
   parse_yaml_conditions(here::here("mother_machine_example.yml")) %>% 
+  group_by(condition, antibio) %>% 
+  slice(1L) %>% 
   unnest(paths) %>% 
-  select(condition, data_path=paths) %>% 
+  select(condition, antibio, data_path=paths) %>% 
   # for each path, find all files matched by the pattern .*\\d+\\.csv (e.g. *20151023.csv)
   mutate(path=map(data_path, ~vngMoM::find.files(., "ExportedCellStats_*.csv.zip"))) %>% 
   unnest(path) %>% 
@@ -30,8 +32,9 @@ myfiles <-
 # myconditions describes acquisition times and temporal change of each condition 
 myconditions <-
   parse_yaml_conditions(here::here("mother_machine_example.yml")) %>% 
-  # select(-paths) %>% 
-  group_by(condition, antibio) %>% 
+  group_by(condition, step_idx) %>%
+  slice(1L) %>% 
+  select(-antibio) %>% 
   mutate(m_start=cumsum(c(0, duration[-(length(duration))])) * 60,
          m_end=cumsum(duration) * 60 - 1e-5, 
          interval = interval*60, duration=NULL,
@@ -78,7 +81,7 @@ autofluo_per_um <- 422.8 # for MG1655 with 2 sec illumination at 17% intensity w
 fp_per_dn <- 1 # dummy placeholder
 
 myframes <- myframes %>%
-  mutate(fluogfp_amplitude = fluo_ampl_ch_1 - autofluo_per_um*length_um,
+  mutate(fluogfp_amplitude = fluo_ampl_ch1 - autofluo_per_um*length_um,
          gfp_nb = fluogfp_amplitude * fp_per_dn)
 
 

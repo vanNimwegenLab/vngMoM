@@ -115,9 +115,10 @@ Note that it is possible to change the order of the fields in the YAML file, e.g
 
 The data loading step produces three dataframes:
 
-- myfiles has one row per data file, and keeps track of the corresponding condition
+- myfiles has one row per data file, and keeps track of the corresponding condition (and series if relevant)
 - myconditions has one row per condition and frame - it features all info related to time and environmental conditions, and is left-joined to myframes (by path and frame) in order to propagate those.
 - myframes gathers all observations measured by deepMoMA with one row per cell and per frame.
+NB: series don't need to be kept track of in myfiles and myconditions
 
 `myframes` has the following variables (and more!) by default
 
