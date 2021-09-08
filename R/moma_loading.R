@@ -1,6 +1,6 @@
 # MoMA loading ####
 utils::globalVariables(c(".", "where", # see https://github.com/r-lib/tidyselect/issues/201
-                         "series", "medium", "duration", "interval", "paths", "condition", "step_idx"))
+                         "series", "medium", "duration", "interval", "paths", "condition", "step_idx", "m_idx", "s_start", "s_end"))
 
 parse_yaml_conditions <- function(.path) {
   yaml::read_yaml(.path) %>% 
@@ -40,6 +40,30 @@ parse_yaml_conditions <- function(.path) {
     # select(-paths) %>% 
     # select(condition, treatment, paths) %>% unnest(paths) %>% 
     identity()
+}
+
+condition_per_frame <- function(.df) {
+  .df %>% 
+    dplyr::select("condition", "medium", "duration", "interval", "step_idx") %>% 
+    dplyr::distinct() %>% 
+    dplyr::group_by(condition) %>% 
+    dplyr::mutate(s_start=cumsum(c(0, duration[-(length(duration))])) * 60,
+                  s_end=cumsum(duration) * 60 - 1e-5, 
+                  interval = interval*60, duration=NULL,
+    ) %>% 
+    # merge consecutive steps of the same media
+    dplyr::group_by(condition) %>% 
+    dplyr::mutate(m_idx=(medium!=dplyr::lag(medium, default=NA)),
+           m_idx=ifelse(dplyr::row_number()==1, TRUE, m_idx),
+           m_idx=cumsum(m_idx)) %>% 
+    dplyr::group_by(condition, m_idx) %>% 
+    dplyr::mutate(m_start=min(s_start), m_end=max(s_end)) %>% 
+    # compute times for each step
+    dplyr::mutate(times=purrr::pmap(list(s_start, s_end, interval), 
+                      ~dplyr::tibble(time_sec = seq(..1, ..2, ..3)) %>% 
+                        dplyr::mutate(frame=row_number()-1) )) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::select(-m_idx, -s_start, -s_end) 
 }
 
 parse_deepmoma_frames <- function(.path, .reader=readr::read_csv) {
