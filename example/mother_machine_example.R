@@ -32,26 +32,7 @@ myfiles <-
 # myconditions describes acquisition times and temporal change of each condition 
 myconditions <-
   parse_yaml_conditions(here::here("mother_machine_example.yml")) %>% 
-  select(condition, medium, duration, interval, step_idx) %>% 
-  distinct() %>% 
-  group_by(condition) %>% 
-  mutate(s_start=cumsum(c(0, duration[-(length(duration))])) * 60,
-         s_end=cumsum(duration) * 60 - 1e-5, 
-         interval = interval*60, duration=NULL,
-  ) %>% 
-  # merge consecutive steps of the same media
-  group_by(condition) %>% 
-  mutate(m_idx=(medium!=dplyr::lag(medium, default=NA)),
-         m_idx=ifelse(row_number()==1, TRUE, m_idx),
-         m_idx=cumsum(m_idx)) %>% 
-  group_by(condition, m_idx) %>% 
-  mutate(m_start=min(s_start), m_end=max(s_end)) %>% 
-  # compute times for each step
-  mutate(times=pmap(list(s_start, s_end, interval), 
-                   ~tibble(time_sec = seq(..1, ..2, ..3)) %>% 
-                     mutate(frame=row_number()-1) )) %>% 
-  ungroup() %>% 
-  select(-m_idx, -s_start, -s_end) %>%
+  condition_per_frame() %>% 
   unnest(times)
 
 myframes <-
