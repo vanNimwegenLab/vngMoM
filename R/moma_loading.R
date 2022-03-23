@@ -1,6 +1,6 @@
 # MoMA loading ####
 utils::globalVariables(c(".", "where", # see https://github.com/r-lib/tidyselect/issues/201
-                         "series", "medium", "duration", "interval", "paths", "condition", "step_idx", "m_idx", "s_start", "s_end"))
+                         "series", "medium", "duration", "interval", "paths", "condition", "step_idx", "m_idx", "s_start", "s_end", "frame", "times"))
 
 parse_yaml_conditions <- function(.path) {
   yaml::read_yaml(.path) %>% 
@@ -63,9 +63,9 @@ condition_per_frame <- function(.df) {
                       ~dplyr::tibble(time_sec = seq(..1, ..2, ..3)) )) %>% 
     dplyr::ungroup() %>% 
     dplyr::select(-m_idx, -s_start, -s_end) %>% 
-    unnest(times) %>% 
+    tidyr::unnest(times) %>% 
     dplyr::group_by(condition) %>% 
-    dplyr::mutate(frame=row_number()-1) %>% 
+    dplyr::mutate(frame=dplyr::row_number()-1) %>% 
     tidyr::nest(times=c(time_sec, frame))
 }
 
@@ -88,13 +88,10 @@ parse_deepmoma_frames <- function(.path, .reader=readr::read_csv) {
     tidyr::fill("type_of_end", .direction="up")
 }
 
-lane_ID,cell_ID,frame,cell_rank,genealogy,type_of_end,parent_ID,cells_in_lane,bbox_top_px,bbox_bottom_px,touches_detection_roi_top,center_x_px,center_y_px,width_px,length_px,tilt_rad,area_px,bgmask_area_px,phc_total_intensity_au,phc_intensity_coefficient_of_variation,label:dead,label:dying,label:fading,label:shrinking,label:dividing,fluo_cellmask_ch_1,fluo_bgmask_ch_1,fluo_ampl_ch_1,fluo_bg_ch_1,fluo_cellmask_ch_2,fluo_bgmask_ch_2,fluo_ampl_ch_2,fluo_bg_ch_2
-
-
 rename_deepmoma_vars <- function(.df) {
   .df %>% 
     dplyr::rename_with(function(.n)
-      case_when(
+      dplyr::case_when(
       .n == "cell_ID" ~ "id", #to remove spaces from column names
       .n == "type_of_end" ~ "end_type",
       .n == "parent_ID" ~ "parent_id",
