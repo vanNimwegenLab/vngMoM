@@ -60,14 +60,25 @@ condition_per_frame <- function(.df) {
     dplyr::mutate(m_start=min(s_start), m_end=max(s_end)) %>% 
     # compute times for each step
     dplyr::mutate(times=purrr::pmap(list(s_start, s_end, interval), 
-                      ~dplyr::tibble(time_sec = seq(..1, ..2, ..3)) %>% 
-                        dplyr::mutate(frame=row_number()-1) )) %>% 
+                      ~dplyr::tibble(time_sec = seq(..1, ..2, ..3)) )) %>% 
     dplyr::ungroup() %>% 
-    dplyr::select(-m_idx, -s_start, -s_end) 
+    dplyr::select(-m_idx, -s_start, -s_end) %>% 
+    unnest(times) %>% 
+    dplyr::group_by(condition) %>% 
+    dplyr::mutate(frame=row_number()-1) %>% 
+    tidyr::nest(times=c(time_sec, frame))
 }
 
 parse_deepmoma_frames <- function(.path, .reader=readr::read_csv) {
-  .reader(.path, skip=2, #lazy=FALSE,
+  # find the index of header row 
+  .ls <- readr::read_lines(.path, n_max=10)
+  .skip <- max(
+    which(.ls == ""), # efault: header after a blank line
+    which(stringr::str_detect(.ls, "^,,,,,,,,,,,")) # for backward compatibility
+  )
+  if (length(.skip) != 1) stop("Cannot determine the row index of csv header...")
+  
+  .reader(.path, skip=.skip, #lazy=FALSE,
            col_types = readr::cols( # specifying col types to avoid parsing NaN as chr and to speed up the import
              "lane_ID"=readr::col_character(),
              "genealogy"=readr::col_character(),
@@ -77,29 +88,37 @@ parse_deepmoma_frames <- function(.path, .reader=readr::read_csv) {
     tidyr::fill("type_of_end", .direction="up")
 }
 
+lane_ID,cell_ID,frame,cell_rank,genealogy,type_of_end,parent_ID,cells_in_lane,bbox_top_px,bbox_bottom_px,touches_detection_roi_top,center_x_px,center_y_px,width_px,length_px,tilt_rad,area_px,bgmask_area_px,phc_total_intensity_au,phc_intensity_coefficient_of_variation,label:dead,label:dying,label:fading,label:shrinking,label:dividing,fluo_cellmask_ch_1,fluo_bgmask_ch_1,fluo_ampl_ch_1,fluo_bg_ch_1,fluo_cellmask_ch_2,fluo_bgmask_ch_2,fluo_ampl_ch_2,fluo_bg_ch_2
+
+
 rename_deepmoma_vars <- function(.df) {
   .df %>% 
-    dplyr::rename(
-      "id"="cell_ID", #to remove spaces from column names
-      "end_type"="type_of_end",
-      "parent_id"="parent_ID",
-      "vertical_bottom"="bbox_bottom px",
-      "vertical_top"="bbox_top px",
-      "center_x_px"="center_x px",
-      "center_y_px"="center_y px",
-      "width_px"="width px",
-      "length_px"="length px",
-      "tilt_radian"="tilt rad",
-      "area_px2"="area px^2",
-      "bg_area_px2"="bgmask_area px^2",
-    ) %>% 
+    dplyr::rename_with(function(.n)
+      case_when(
+      .n == "cell_ID" ~ "id", #to remove spaces from column names
+      .n == "type_of_end" ~ "end_type",
+      .n == "parent_ID" ~ "parent_id",
+      .n == "bbox_bottom px" ~ "vertical_bottom",
+      .n == "bbox_bottom_px" ~ "vertical_bottom",
+      .n == "bbox_top px" ~ "vertical_top",
+      .n == "bbox_top_px" ~ "vertical_top",
+      .n == "center_x px" ~ "center_x_px",
+      .n == "center_y px" ~ "center_y_px",
+      .n == "width px" ~ "width_px",
+      .n == "length px" ~ "length_px",
+      .n == "tilt rad" ~ "tilt_rad",
+      .n == "area px^2" ~ "area_px",
+      .n == "bgmask_area px^2" ~ "bg_area_px",
+      TRUE ~ .n
+    ) ) %>% 
     dplyr::rename_with(
       function(.name) stringr::str_replace(.name, "(.*)_ch_(\\d+)", "\\1_ch\\2"),
       dplyr::matches("_ch_\\d+") ) %>% 
     dplyr::rename_with(
+    # kept for backward compatibility
       function(.name) stringr::str_replace(.name, "fluo_cellmask_(\\d+)", "fluo_cellmask_ch\\1"),
       dplyr::matches("fluo_cellmask_\\d+") ) %>% 
-    tidyr::extract("path", c("date"), ".*(20\\d{6})_.*", remove=FALSE, convert=FALSE) %>%
+    tidyr::extract("path", c("date"), ".*(20\\d{6})_.*", remove=FALSE, convert=TRUE) %>%
     tidyr::extract("lane_ID", c("pos", "gl"), ".*[Pp]os_(\\d+)_GL_(\\d+)", remove=TRUE, convert=TRUE)
 }
 

@@ -2,10 +2,12 @@
 # - `condition` must be a unique string
 # - `medium`, `duration`, `interval` must be lists 
 # (of the same length for a given condition) or scalars (value is recycled)
+# NB: list are casted to the type of their first element, hence `[3., 1.5]` is read as a vector but `[3, 1.5]` is read as a list (and raises an error)
+# NB: ".inf" can be used for `Inf` but only in a list of float (hence `[720., .inf]` is read correctly but `[720, .inf]` raises an error])
 # - `paths` are lists of strings
 # - other custom fields can be added (must be scalar!)
-# - for a given concdition, several `series` can be declared as a list 
-# containing paths and other custom fields (see below). NB: sicne series are 
+# - for a given condition, several `series` can be declared as a list 
+# containing paths and other custom fields (see below). NB: since series are 
 # *not* named, (at least one) custom field must be used to distinguish them.
 # For the rest, any valid YAML syntax should be accepted (mind tabs vs spaces).
 
