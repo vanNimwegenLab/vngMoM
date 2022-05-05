@@ -45,10 +45,7 @@ myframes <-
   mutate(regrow=NULL) %>%  # get rid of a column added manually in some input files
   rename_deepmoma_vars() %>% 
   # propagate time and medium info
-  left_join(myconditions %>% ungroup() %>% unnest(paths) %>% 
-              rename(data_path=paths) %>% select(-condition, -interval),
-            by=c("data_path", "frame")) %>%
-  select(-data_path) %>% 
+  left_join(myconditions, by=c("condition", "frame")) %>%
   # append useful variables #(per cell)
   mutate(
     cell=paste(date, pos, gl, id, sep='.'),

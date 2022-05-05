@@ -5,6 +5,22 @@ editor_options:
   chunk_output_type: console
 ---
 
+Plot a few random single-cell traces
+```{r}
+myframes %>% 
+  filter(time_start > 0, !end_type %in% "exit") %>% 
+  group_by(condition, cell) %>% nest() %>% 
+  group_by(condition) %>% sample_n(10L) %>% 
+  unnest() %>% ungroup() %>% 
+  ggplot(aes(time_sec, length_um, group=cell)) +
+  facet_wrap(~condition, ncol=1) +
+  geom_line() +
+  scale_y_continuous(trans="log2") +
+  NULL
+
+```
+
+
 ```{r}
 
 mycells <-
