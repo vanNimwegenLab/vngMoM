@@ -73,8 +73,9 @@ parse_deepmoma_frames <- function(.path, .reader=readr::read_csv) {
   # find the index of header row 
   .ls <- readr::read_lines(.path, n_max=10)
   .skip <- max(
-    which(.ls == ""), # efault: header after a blank line
-    which(stringr::str_detect(.ls, "^,,,,,,,,,,,")) # for backward compatibility
+    stringr::str_which(.ls, "^#"), # new format: `#` at the start of header lines
+    which(.ls == ""), # for backward compatibility: header after a blank line
+    stringr::str_which(.ls, "^,,,,,,,,,,,") # for backward compatibility
   )
   if (length(.skip) != 1) stop("Cannot determine the row index of csv header...")
   
