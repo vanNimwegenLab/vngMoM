@@ -21,7 +21,7 @@ parse_yaml_conditions <- function(.path) {
     # check that `medium`, `duration` and `interval` have same length, and add step index
     dplyr::mutate(step_idx = purrr::pmap(list(medium, duration, interval), ~{ #browser()
       .ls <- unique(c(length(..1), length(..2), length(..3)))
-      if (length(setdiff(.ls, 1)) > 1) stop("`medium`, `duration` and `interval` have same length (or be scalar values).")
+      if (length(setdiff(.ls, 1)) > 1) stop("`medium`, `duration` and `interval` must have same length (or be scalar values).")
       return(1:max(.ls))
     })) %>% 
     (function(.df) {
@@ -42,13 +42,14 @@ parse_yaml_conditions <- function(.path) {
     identity()
 }
 
-condition_per_frame <- function(.df) {
+condition_per_frame <- function(.df, .epsilon=1e-5) {
   .df %>% 
     dplyr::select("condition", "medium", "duration", "interval", "step_idx") %>% 
     dplyr::distinct() %>% 
     dplyr::group_by(condition) %>% 
     dplyr::mutate(s_start=cumsum(c(0, duration[-(length(duration))])) * 60,
-                  s_end=cumsum(duration) * 60 - 1e-5, 
+                  s_end=cumsum(duration) * 60 - .epsilon, 
+                  s_end=ifelse(row_number()<n(), s_end, s_end+.epsilon), # set the end point of the last to its actual value (otherwise the last frame exported by MoMA has no time)
                   interval = interval*60, duration=NULL,
     ) %>% 
     # merge consecutive steps of the same media
