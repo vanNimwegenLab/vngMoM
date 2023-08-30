@@ -118,7 +118,7 @@ rename_deepmoma_vars <- function(.df) {
       function(.name) stringr::str_replace(.name, "fluo_cellmask_(\\d+)", "fluo_cellmask_ch\\1"),
       dplyr::matches("fluo_cellmask_\\d+") ) %>% 
     tidyr::extract("path", c("date"), ".*(20\\d{6})_.*", remove=FALSE, convert=TRUE) %>%
-    tidyr::extract("lane_ID", c("pos", "gl"), ".*[Pp]os_(\\d+)_GL_(\\d+)", remove=TRUE, convert=TRUE)
+    tidyr::extract("lane_ID", c("pos", "gl"), "(.*)_GL_?(\\d+)", remove=TRUE, convert=TRUE)
 }
 
 which_touch_exit <- function(.h, .hmin_cutoff) {
