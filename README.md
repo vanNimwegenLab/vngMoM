@@ -6,8 +6,9 @@ title: "vngMoM"
 After image acquisition, Mother Machine data are processed using deepMoMA. Here we describe the analysis of deepMoMA's output using R, in particular:
 - how to load MoMA data
 - how to concatenate all data analysed in a project in the same dataframe
-- simple examples of data selection and plotting
+- simple examples of data selection and plotting.
 
+This repository is the source code for the R package `vngMoM` which provides helper functions for the aforementioned tasks, as well as a template project for analysing data (in the `example` subdirectory).
 Most of this R code rely heavily on the `tidyverse` libraries. Getting familiar with those first, e.g. reading [R for data science](https://r4ds.had.co.nz), will definitely help you follow this analysis.
 
 `.` is the project directory. All paths to data files are defined locally.
@@ -51,6 +52,19 @@ In case you're granted read-only access to https://github.com/nimwegenLab/vngMoM
 
 
 # Loading data in R
+
+## R environment
+
+First, load the `mother_machine_example.Rproj` file of the template project (in `example`). 
+The R environment used for this project is managed using `renv` (running `renv::init()` should restore all necessary package, but you need to make sure that you use an appropriate R version — at best the same as described in the file `renv.lock`). 
+Learn more about collaborating with `renv` at https://rstudio.github.io/renv/articles/collaborating.html#collaborating-with-renv.
+
+Run `MoM_lacInduction.R` to load the data and render the analysis files to html.
+Note that calling `render()` or `render_site()` from the command line allows to execute the function in the global env() (hence inheriting existing variables and keeping newly created ones).
+
+These scripts rely heavily on [`multidplyr`](https://multidplyr.tidyverse.org)...
+
+
 
 ## Defining experimental conditions and paths to deepMoMA export files
 
@@ -174,4 +188,54 @@ myframes %>%
   summarize(mu=mean(gfp_nb), sd=sd(gfp_nb))
 ```
 
+
+# Sharing the notebooks output online
+
+## Preparing the rendered files
+
+Once a project is completed, it is convenient to produce a static output of all its notebooks, which can later be browsed without initialising an R session. To facilitate this, the project template is designed as a Rmarkdown "site" (which requires rmarkdown ≥ 1.0).  
+An example of this type of notebook rendering can be browsed at https://julou.github.io/MoM_lacInduction.
+
+In _site.yml, shared properties are set, in particular the structure of the navigation bar.  
+`exclude: ["*"]` is required to prevent all subdirectories to be copied (all the more so as symlinks are followed!)
+
+The output is rendered in `/docs`, which is supported by Github Pages as website root; a `.nojekyll` empty file ensures that files are served as they are.  
+NB: the `index.Rmd` file is required for site_render() to execute.
+
+Here is an example of the minimal YAML header to put in each Rmarkdown file.
+NB: date syntax from http://stackoverflow.com/questions/23449319
+
+```
+---
+title: "My relevant title"
+author: Thomas Julou
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+```
+
+
+## Deploying the rendered files using Github Pages
+
+If your repo is synchronised with github at the url `https://github.com/myAccount/myProject", the corresponding Github Pages website wil be available at https://myAccount.github.io/myProject.
+
+The corresponding files must be pushed to the github repository, and the deployment must be configured in the repository's settings (under "Code and automation > Pages").
+There are primarily two ways to achieve this, and the settings must be adjusted accordingly.
+
+### First option (not recommended): adding the rendered files to the project source code
+Arguably the simplest option is to leave the rendered files in the `docs` subdirectory where they have been output by Rmarkdown. The obvious drawback is that the code is now cluttered by this additional subdirectory.
+
+To do the versioning this way, simply delete the `.gitignore` file in `docs`, then commit and push the files as usual.
+
+### Second option: moving the rendered files to another branch
+In order to separate the code and the rendered files, it is possible to copy the content of the `docs` directory (of the code branch `master`) to the root of a dedicated branch (typically named `gh-branch`).
+
+```
+# create branch if it does not exist
+git checkout -b gh-pages 
+
+git checkout master # make sure you are on the "code" branch 
+git checkout gh-pages "docs/*"
+```
+
+After that, don't forget to commit and push the content of both branches.
 

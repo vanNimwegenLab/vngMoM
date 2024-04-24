@@ -1,8 +1,7 @@
 ---
 title: "My custom data analysis"
-output: html_document
-editor_options: 
-  chunk_output_type: console
+author: Your Name
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 ---
 
 Plot a few random single-cell traces

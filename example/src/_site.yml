@@ -1,0 +1,16 @@
+output_dir: "../docs" # can be used as root by GitHub Pages
+exclude: ["*"]
+include: []
+
+output:
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+author: Thomas Julou
+
+navbar:
+  title: "My great project"
+  left:
+    - text: "My custom data analysis"
+      href: mother_machine_example_analysis.html

@@ -77,7 +77,8 @@ myframes <- myframes %>%
 # calling `render()` or `render_site()` from the command line allows to execute the function 
 # in the global envt (hence inheriting existing variables and keeping the newly created ones)...
 
-rmarkdown::render('./mother_machine_example_analysis.Rmd')
+rmarkdown::render_site('./src/mother_machine_example_analysis.Rmd')
+rmarkdown::render_site('./src/index.Rmd')
 
 
 # SAVE ENVIRONMENT ####
