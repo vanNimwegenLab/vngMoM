@@ -1,7 +1,7 @@
 
 
-This repository is the source code for the R package `vngMoM` which provides helper functions for the aforementioned tasks, as well as a template project for analysing data (in the `example` subdirectory).
-Most of this R code rely heavily on the `tidyverse` libraries. Getting familiar with those first, e.g. reading [R for data science](https://r4ds.had.co.nz), will definitely help you follow this analysis.
+This repository is the source code for the R package `vngMoM` which provides helper functions for analysing mother machine data obtaine with the image analysis software (deep)MoMA, as well as a template project for analysing such data (in the `example` subdirectory).
+Most of this R code rely heavily on the `tidyverse` libraries. Getting familiar with those first, e.g. reading [R for data science](https://r4ds.hadley.nz), will definitely help you follow this analysis.
 
 
 # Installation

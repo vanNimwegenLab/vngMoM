@@ -4,7 +4,7 @@ After image acquisition, Mother Machine data are processed using deepMoMA. Here 
 - how to concatenate all data analysed in a project in the same dataframe
 - simple examples of data selection and plotting.
 
-Most of this R code rely heavily on the `tidyverse` libraries. Getting familiar with those first, e.g. reading [R for data science](https://r4ds.had.co.nz), will definitely help you follow this analysis.
+Most of this R code rely heavily on the `tidyverse` libraries. Getting familiar with those first, e.g. reading [R for data science](https://r4ds.hadley.nz), will definitely help you follow this analysis.
 
 `.` is the project directory. All paths to data files are defined locally.
 
